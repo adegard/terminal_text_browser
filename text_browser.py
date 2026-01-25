@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 import os
+import re
 import shutil
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import (
-    urljoin,
-    urlparse,
-    parse_qs,
-    unquote,
-    urlunparse,
-    urlencode,
+    urljoin, urlparse, parse_qs, unquote,
+    urlunparse
 )
 
 # ========= CONFIG =========
@@ -17,6 +14,7 @@ SAFE_MODE = True
 STRIP_DDG_TRACKING = True
 DUCK_LITE = "https://lite.duckduckgo.com/lite/"
 BOOKMARK_FILE = os.path.expanduser("~/.tbrowser_bookmarks")
+PARAS_PER_PAGE = 3
 
 # ========= COLORS =========
 C_RESET = "\033[0m"
@@ -26,61 +24,82 @@ C_CMD = "\033[92m"
 C_ERR = "\033[91m"
 C_DIM = "\033[90m"
 
+# ========= HTTP SESSION =========
 session = requests.Session()
-session.headers.update({
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"
-})
+session.headers.update({"User-Agent": "Mozilla/5.0"})
+
+# ========= CLEANING + WRAPPING =========
+def clean_paragraph(text):
+    text = text.replace("\n", " ")
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+def wrap(text, width):
+    words = text.split()
+    lines = []
+    current = ""
+
+    for w in words:
+        if len(current) + len(w) + (1 if current else 0) > width:
+            if current:
+                lines.append(current)
+            current = w
+        else:
+            current = w if current == "" else current + " " + w
+
+    if current:
+        lines.append(current)
+
+    return lines
 
 # ========= BOOKMARKS =========
 def load_bookmarks():
     if not os.path.exists(BOOKMARK_FILE):
         return []
-    with open(BOOKMARK_FILE, "r") as f:
-        return [line.strip() for line in f if line.strip()]
+    with open(BOOKMARK_FILE) as f:
+        return [x.strip() for x in f if x.strip()]
 
 def save_bookmark(url):
     with open(BOOKMARK_FILE, "a") as f:
         f.write(url + "\n")
 
-def delete_bookmark(index):
-    bms = load_bookmarks()
-    if 0 <= index < len(bms):
-        del bms[index]
+def delete_bookmark(i):
+    b = load_bookmarks()
+    if 0 <= i < len(b):
+        del b[i]
         with open(BOOKMARK_FILE, "w") as f:
-            for b in bms:
-                f.write(b + "\n")
+            for x in b:
+                f.write(x + "\n")
 
 # ========= URL HELPERS =========
-def normalize_url(text):
-    text = text.strip()
-    if text.startswith("http://") or text.startswith("https://"):
-        return text
-    if "." in text:
-        return "https://" + text
+def normalize_url(t):
+    t = t.strip()
+    if t.startswith("http://") or t.startswith("https://"):
+        return t
+    if "." in t:
+        return "https://" + t
     return None
 
 def strip_duckduckgo_tracking(url):
     if not STRIP_DDG_TRACKING:
         return url
-    parsed = urlparse(url)
-    if "duckduckgo.com" not in parsed.netloc:
+    p = urlparse(url)
+    if "duckduckgo.com" not in p.netloc:
         return url
-    return urlunparse(parsed._replace(query=""))
+    return urlunparse(p._replace(query=""))
 
 def unwrap_duckduckgo_redirect(url):
     if url.startswith("//duckduckgo.com/l/?"):
         url = "https:" + url
-    parsed = urlparse(url)
-    if "duckduckgo.com" in parsed.netloc and parsed.path.startswith("/l"):
-        qs = parse_qs(parsed.query)
+    p = urlparse(url)
+    if "duckduckgo.com" in p.netloc and p.path.startswith("/l"):
+        qs = parse_qs(p.query)
         if "uddg" in qs:
             return unquote(qs["uddg"][0])
     return url
 
 def unwrap_generic_redirect(url):
-    url = unwrap_duckduckgo_redirect(url)
-    url = strip_duckduckgo_tracking(url)
-    return url
+    return strip_duckduckgo_tracking(unwrap_duckduckgo_redirect(url))
 
 def is_ad_or_tracker(url):
     if not SAFE_MODE:
@@ -88,7 +107,7 @@ def is_ad_or_tracker(url):
     host = urlparse(url).netloc.lower()
     bad = ["doubleclick", "adservice", "adsystem", "tracking",
            "analytics", "pixel", "googlesyndication"]
-    return any(k in host for k in bad)
+    return any(b in host for b in bad)
 
 # ========= FETCH & PARSE =========
 def fetch(url):
@@ -99,44 +118,43 @@ def fetch(url):
 def extract(html, base):
     soup = BeautifulSoup(html, "html.parser")
 
-    # Remove scripts, navbars, footers
     for tag in soup(["script", "style", "nav", "footer", "header"]):
         tag.decompose()
 
-    # Find main content
     candidates = []
     for tag in soup.find_all(["article", "main", "div"]):
         size = len(tag.get_text(strip=True))
         candidates.append((size, tag))
-    candidates.sort(reverse=True, key=lambda x: x[0])
+    candidates.sort(key=lambda x: x[0], reverse=True)
     main = candidates[0][1] if candidates else soup.body or soup
 
-    # Extract readable paragraphs
     paragraphs = []
     for p in main.find_all(["p", "li"]):
-        text = " ".join(p.get_text(" ", strip=True).split())
-        if len(text) > 40:
-            paragraphs.append(text)
+        raw = p.get_text(" ", strip=True)
+        clean = clean_paragraph(raw)
+        if len(clean) > 40:
+            paragraphs.append(clean)
 
-    # Extract links
     links = []
     for a in main.find_all("a", href=True):
         label = a.get_text(" ", strip=True)
-        href = urljoin(base, a["href"])
-        href = unwrap_generic_redirect(href)
-        if is_ad_or_tracker(href):
-            continue
-        links.append((label if label else href, href))
+        href = unwrap_generic_redirect(urljoin(base, a["href"]))
+        if not is_ad_or_tracker(href):
+            links.append((label if label else href, href))
 
     return paragraphs, links
 
-def paginate(items, size=20):
-    for i in range(0, len(items), size):
-        yield items[i:i + size]
+def chunk_paragraphs(paragraphs, n):
+    for i in range(0, len(paragraphs), n):
+        yield paragraphs[i:i+n]
+
+def paginate(items, n=20):
+    for i in range(0, len(items), n):
+        yield items[i:i+n]
 
 # ========= SEARCH =========
-def search_duck(query):
-    r = session.get(DUCK_LITE + "?q=" + query, timeout=15)
+def search_duck(q):
+    r = session.get(DUCK_LITE + "?q=" + q, timeout=15)
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "html.parser")
 
@@ -144,12 +162,11 @@ def search_duck(query):
     for a in soup.select("a.result-link"):
         title = a.get_text(" ", strip=True)
         href = unwrap_generic_redirect(a.get("href"))
-        if not href or is_ad_or_tracker(href):
-            continue
-        results.append((title, href))
+        if not is_ad_or_tracker(href):
+            results.append((title, href))
     return results
 
-# ========= UI HELPERS =========
+# ========= UI =========
 def clear_screen():
     os.system("clear")
 
@@ -160,22 +177,22 @@ def print_search_results(results):
         print(f"{C_LINK}{i}. {C_RESET}{title}")
         print(f"   {C_DIM}{url}{C_RESET}")
     print()
-    print(f"{C_CMD}Select number, 'h' for home, 'q' to quit.{C_RESET}")
+    print(f"{C_CMD}Select number, h=home, q=quit{C_RESET}")
 
 def home():
     while True:
         print(f"\n{C_TITLE}=== HOME ==={C_RESET}")
-        text = input("> ").strip()
-        if not text:
+        t = input("> ").strip()
+        if not t:
             continue
 
-        url = normalize_url(text)
+        url = normalize_url(t)
         if url:
             return url
 
-        results = search_duck(text)
+        results = search_duck(t)
         if not results:
-            print(f"{C_ERR}No results found.{C_RESET}")
+            print(f"{C_ERR}No results.{C_RESET}")
             continue
 
         while True:
@@ -186,159 +203,150 @@ def home():
             if c == "h":
                 break
             if c.isdigit():
-                idx = int(c)
-                if 1 <= idx <= len(results):
-                    return results[idx - 1][1]
+                i = int(c)
+                if 1 <= i <= len(results):
+                    return results[i-1][1]
 
 # ========= BOOKMARK MANAGER =========
 def bookmark_manager():
     while True:
         clear_screen()
-        bms = load_bookmarks()
+        b = load_bookmarks()
         print(f"{C_TITLE}=== BOOKMARKS ==={C_RESET}\n")
 
-        if not bms:
-            print("No bookmarks yet.")
-            input("\nPress Enter…")
+        if not b:
+            print("No bookmarks.")
+            input("\nEnter…")
             return None
 
-        for i, u in enumerate(bms, 1):
+        for i, u in enumerate(b, 1):
             print(f"{i}. {u}")
 
-        print(f"\n{C_CMD}Commands:{C_RESET}")
-        print("  number = open bookmark")
-        print("  d#     = delete bookmark (example: d3)")
-        print("  q      = back")
+        print(f"\n{C_CMD}number=open  d#=delete  q=back{C_RESET}")
 
-        cmd = input("\nBookmark> ").strip().lower()
+        c = input("> ").strip().lower()
 
-        if cmd == "q":
+        if c == "q":
             return None
-
-        if cmd.startswith("d") and cmd[1:].isdigit():
-            idx = int(cmd[1:]) - 1
-            delete_bookmark(idx)
+        if c.startswith("d") and c[1:].isdigit():
+            delete_bookmark(int(c[1:]) - 1)
             continue
-
-        if cmd.isdigit():
-            idx = int(cmd) - 1
-            if 0 <= idx < len(bms):
-                return bms[idx]
+        if c.isdigit():
+            i = int(c) - 1
+            if 0 <= i < len(b):
+                return b[i]
 
 # ========= PAGE VIEW =========
+def build_text_pages(paragraphs):
+    if not paragraphs:
+        return [["[No readable text]"]]
+
+    pages = []
+    for block in chunk_paragraphs(paragraphs, PARAS_PER_PAGE):
+        lines = []
+        cols = shutil.get_terminal_size().columns
+        usable_width = max(10, cols)
+        for para in block:
+            clean = clean_paragraph(para)
+            wrapped = wrap(clean, usable_width)
+            lines.extend(wrapped)
+            lines.append("")
+        pages.append(lines)
+    return pages
+
 def show_page(url, history):
     try:
         html = fetch(url)
     except Exception as e:
-        print(f"{C_ERR}Error: {e}{C_RESET}")
-        input("Press Enter…")
+        print(f"{C_ERR}{e}{C_RESET}")
+        input("Enter…")
         return None
 
     paragraphs, links = extract(html, url)
-
-    text_pages = list(paginate(paragraphs, 15))
+    text_pages = build_text_pages(paragraphs)
     link_pages = list(paginate(links, 20))
 
     mode = "text"
-    page_index = 0
+    page = 0
 
     while True:
         clear_screen()
-        width = shutil.get_terminal_size().columns
-
+        cols = shutil.get_terminal_size().columns
         print(f"{C_TITLE}URL: {url}{C_RESET}")
-        print("=" * width)
+        print("=" * cols)
 
-        # TEXT MODE
         if mode == "text":
-            print(f"{C_TITLE}--- TEXT ---{C_RESET}\n")
-            if text_pages:
-                for p in text_pages[page_index]:
-                    print(p + "\n")
-                print(f"{C_DIM}Page {page_index + 1}/{len(text_pages)}{C_RESET}")
-            else:
-                print("[No readable text]\n")
+            for line in text_pages[page]:
+                print(line)
+            print(f"\n{C_DIM}Block {page+1}/{len(text_pages)}{C_RESET}")
+            print(f"{C_CMD}[ENTER]=next  p=prev  l=links  m=bookmark bm=saved  h=home  q=quit{C_RESET}")
 
-            print(f"\n{C_CMD}Commands:{C_RESET}")
-            print("  n/p    = next/prev text page")
-            print("  l      = switch to links")
-            print("  bm     = bookmarks")
-            print("  b      = back")
-            print("  h      = home")
-            print("  m      = bookmark")
-            print("  q      = quit")
-
-        # LINK MODE
         else:
-            print(f"{C_TITLE}--- LINKS ---{C_RESET}\n")
-            if link_pages:
-                for i, (label, link) in enumerate(link_pages[page_index], 1):
-                    short = (label[:60] + "…") if len(label) > 60 else label
+            if link_pages and 0 <= page < len(link_pages):
+                for i, (label, link) in enumerate(link_pages[page], 1):
+                    short = label[:60] + "…" if len(label) > 60 else label
                     print(f"{i}. {short} {C_DIM}→ {link}{C_RESET}")
-                print(f"\n{C_DIM}Page {page_index + 1}/{len(link_pages)}{C_RESET}")
+                print(f"\n{C_DIM}Page {page+1}/{len(link_pages)}{C_RESET}")
             else:
                 print("[No links]\n")
 
-            print(f"\n{C_CMD}Commands:{C_RESET}")
-            print("  number = open link")
-            print("  n/p    = next/prev link page")
-            print("  t      = switch to text")
-            print("  bm     = bookmarks")
-            print("  b      = back")
-            print("  h      = home")
-            print("  m      = bookmark")
-            print("  q      = quit")
+            print(f"{C_CMD}[ENTER]=next  p=prev  number=open  t=text  b=back  h=home  q=quit{C_RESET}")
 
-        cmd = input("\nCommand> ").strip().lower()
+        raw = input("> ")
+        c = raw.strip().lower()
+
+        # ENTER only → next
+        if raw == "":
+            c = "next"
 
         # Global
-        if cmd == "q":
+        if c == "q":
             raise SystemExit
-        if cmd == "h":
+        if c == "h":
             return None
-        if cmd == "b":
+        if c == "b":
             return history.pop() if history else None
-        if cmd == "m":
+        if c == "m":
             save_bookmark(url)
-            input("Bookmarked. Press Enter…")
+            input("Saved. Enter…")
             continue
-        if cmd == "bm":
-            bm_url = bookmark_manager()
-            if bm_url:
-                return bm_url
+        if c == "bm":
+            bm = bookmark_manager()
+            if bm:
+                return bm
             continue
 
-        # Text mode
+        # TEXT MODE
         if mode == "text":
-            if cmd == "l":
+            if c == "l":
                 mode = "links"
-                page_index = 0
+                page = 0
                 continue
-            if cmd == "n" and page_index < len(text_pages) - 1:
-                page_index += 1
+            if c == "next" and page < len(text_pages) - 1:
+                page += 1
                 continue
-            if cmd == "p" and page_index > 0:
-                page_index -= 1
+            if c == "p" and page > 0:
+                page -= 1
                 continue
 
-        # Link mode
+        # LINK MODE
         else:
-            if cmd == "t":
+            if c == "t":
                 mode = "text"
-                page_index = 0
+                page = 0
                 continue
-            if cmd == "n" and page_index < len(link_pages) - 1:
-                page_index += 1
+            if c == "next" and page < len(link_pages) - 1:
+                page += 1
                 continue
-            if cmd == "p" and page_index > 0:
-                page_index -= 1
+            if c == "p" and page > 0:
+                page -= 1
                 continue
-            if cmd.isdigit():
-                idx = int(cmd) - 1
-                if 0 <= idx < len(link_pages[page_index]):
-                    return link_pages[page_index][idx][1]
+            if c.isdigit() and link_pages:
+                i = int(c) - 1
+                if 0 <= page < len(link_pages) and 0 <= i < len(link_pages[page]):
+                    return link_pages[page][i][1]
 
-        input(f"{C_ERR}Invalid command.{C_RESET} Press Enter…")
+        input(f"{C_ERR}Invalid.{C_RESET} Enter…")
 
 # ========= MAIN LOOP =========
 def main():
@@ -348,11 +356,8 @@ def main():
     while True:
         if current is None:
             current = home()
-
         history.append(current)
-        next_url = show_page(current, history)
-
-        current = next_url
+        current = show_page(current, history)
 
 if __name__ == "__main__":
     main()
