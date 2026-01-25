@@ -62,14 +62,12 @@ def strip_duckduckgo_tracking(url):
     if "duckduckgo.com" not in parsed.netloc:
         return url
     qs = parse_qs(parsed.query)
-    # keep only essential params (here: none)
     allowed = {}
     new_query = urlencode(allowed, doseq=True)
     return urlunparse(parsed._replace(query=new_query))
 
 
 def unwrap_duckduckgo_redirect(url):
-    # protocol-relative
     if url.startswith("//duckduckgo.com/l/?"):
         url = "https:" + url
 
@@ -82,7 +80,6 @@ def unwrap_duckduckgo_redirect(url):
 
 
 def unwrap_generic_redirect(url):
-    # place for other search engines if you add them later
     url = unwrap_duckduckgo_redirect(url)
     url = strip_duckduckgo_tracking(url)
     return url
@@ -140,9 +137,9 @@ def extract(html, base):
     return paragraphs, links
 
 
-def paginate(paragraphs, page_size=20):
-    for i in range(0, len(paragraphs), page_size):
-        yield paragraphs[i:i + page_size]
+def paginate(items, page_size=20):
+    for i in range(0, len(items), page_size):
+        yield items[i:i + page_size]
 
 
 # ========= SEARCH =========
@@ -216,6 +213,7 @@ def home():
                 print(f"{C_ERR}Invalid input.{C_RESET}")
 
 
+# ========= PAGE VIEW =========
 def show_page(url, history):
     try:
         html = fetch(url)
@@ -225,41 +223,65 @@ def show_page(url, history):
         return None
 
     paragraphs, links = extract(html, url)
-    pages = list(paginate(paragraphs))
+
+    text_pages = list(paginate(paragraphs, page_size=15))
+    link_pages = list(paginate(links, page_size=20))
+
+    mode = "text"   # "text" or "links"
     page_index = 0
 
     while True:
         clear_screen()
         width = shutil.get_terminal_size().columns
+
         print(f"{C_TITLE}URL: {url}{C_RESET}")
         print("=" * width)
 
-        if pages:
-            for p in pages[page_index]:
-                print(p + "\n")
-            print(f"{C_DIM}Page {page_index + 1}/{len(pages)}{C_RESET}\n")
-        else:
-            print("[No readable text]\n")
+        # ----- TEXT MODE -----
+        if mode == "text":
+            print(f"{C_TITLE}--- TEXT ---{C_RESET}\n")
 
-        print(f"{C_LINK}Links:{C_RESET}")
-        if links:
-            for i, (label, link) in enumerate(links, 1):
-                short = (label[:60] + "…") if len(label) > 60 else label
-                print(f"{i}. {short} {C_DIM}→ {link}{C_RESET}")
-        else:
-            print("[No links]")
+            if text_pages:
+                for p in text_pages[page_index]:
+                    print(p + "\n")
+                print(f"{C_DIM}Page {page_index + 1}/{len(text_pages)}{C_RESET}")
+            else:
+                print("[No readable text]\n")
 
-        print(f"\n{C_CMD}Commands:{C_RESET}")
-        print("  number = open link")
-        print("  n/p    = next/prev page")
-        print("  b      = back")
-        print("  h      = home")
-        print("  m      = bookmark")
-        print("  bm     = show bookmarks")
-        print("  q      = quit")
+            print(f"\n{C_CMD}Commands:{C_RESET}")
+            print("  n/p    = next/prev text page")
+            print("  l      = switch to links")
+            print("  b      = back")
+            print("  h      = home")
+            print("  m      = bookmark")
+            print("  bm     = show bookmarks")
+            print("  q      = quit")
+
+        # ----- LINK MODE -----
+        else:
+            print(f"{C_TITLE}--- LINKS ---{C_RESET}\n")
+
+            if link_pages:
+                for i, (label, link) in enumerate(link_pages[page_index], 1):
+                    short = (label[:60] + "…") if len(label) > 60 else label
+                    print(f"{i}. {short} {C_DIM}→ {link}{C_RESET}")
+                print(f"\n{C_DIM}Page {page_index + 1}/{len(link_pages)}{C_RESET}")
+            else:
+                print("[No links]\n")
+
+            print(f"\n{C_CMD}Commands:{C_RESET}")
+            print("  number = open link")
+            print("  n/p    = next/prev link page")
+            print("  t      = switch to text")
+            print("  b      = back")
+            print("  h      = home")
+            print("  m      = bookmark")
+            print("  bm     = show bookmarks")
+            print("  q      = quit")
 
         cmd = input("\nCommand> ").strip().lower()
 
+        # ===== Global commands =====
         if cmd == "q":
             raise SystemExit
 
@@ -268,14 +290,6 @@ def show_page(url, history):
 
         if cmd == "b":
             return history.pop() if history else None
-
-        if cmd == "n" and page_index < len(pages) - 1:
-            page_index += 1
-            continue
-
-        if cmd == "p" and page_index > 0:
-            page_index -= 1
-            continue
 
         if cmd == "m":
             save_bookmark(url)
@@ -295,17 +309,48 @@ def show_page(url, history):
             input("\nPress Enter…")
             continue
 
-        if cmd.isdigit():
-            idx = int(cmd)
-            if 1 <= idx <= len(links):
-                raw = links[idx - 1][1]
-                clean = unwrap_generic_redirect(raw)
-                return clean
+        # ===== Text mode navigation =====
+        if mode == "text":
+            if cmd == "l":
+                mode = "links"
+                page_index = 0
+                continue
+
+            if cmd == "n" and page_index < len(text_pages) - 1:
+                page_index += 1
+                continue
+
+            if cmd == "p" and page_index > 0:
+                page_index -= 1
+                continue
+
+        # ===== Link mode navigation =====
+        else:
+            if cmd == "t":
+                mode = "text"
+                page_index = 0
+                continue
+
+            if cmd == "n" and page_index < len(link_pages) - 1:
+                page_index += 1
+                continue
+
+            if cmd == "p" and page_index > 0:
+                page_index -= 1
+                continue
+
+            if cmd.isdigit():
+                idx = int(cmd)
+                if 1 <= idx <= len(link_pages[page_index]):
+                    raw = link_pages[page_index][idx - 1][1]
+                    clean = unwrap_generic_redirect(raw)
+                    return clean
 
         print(f"{C_ERR}Invalid command.{C_RESET}")
         input("Press Enter…")
 
 
+# ========= MAIN LOOP =========
 def main():
     history = []
     current = None
