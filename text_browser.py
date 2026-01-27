@@ -14,7 +14,7 @@ SAFE_MODE = True
 STRIP_DDG_TRACKING = True
 DUCK_LITE = "https://lite.duckduckgo.com/lite/"
 BOOKMARK_FILE = os.path.expanduser("~/.tbrowser_bookmarks")
-PARAS_PER_PAGE = 3
+PARAS_PER_PAGE = 2
 
 # ========= COLORS =========
 C_RESET = "\033[0m"
@@ -132,7 +132,7 @@ def extract(html, base):
     for p in main.find_all(["p", "li"]):
         raw = p.get_text(" ", strip=True)
         clean = clean_paragraph(raw)
-        if len(clean) > 40:
+        if len(clean) > 20:
             paragraphs.append(clean)
 
     links = []
@@ -182,8 +182,22 @@ def print_search_results(results):
 
 def home():
     while True:
-        print(f"\n{C_TITLE}=== HOME ==={C_RESET}")
-        print(f"{C_CMD} Write term to search or url or 'bm' for saved  bookmards{C_RESET}")
+        print(r"""
+           _.-''''''-._
+        .-'  _     _   '-.
+      .'    (_)   (_)     '.
+     /      .-'''-.         \
+    |     .'       `.        |
+    |    /  .---.    \       |
+    |    |  /   \ |   |      |
+     \   \  \___/ /   /     /
+      '.  '._   _.'  .'     /
+        '-._'''''_.-'     .'
+             '-.....-'
+
+        """)
+        print(f"\n{C_TITLE}=== TEXT BROWSER V.0 ==={C_RESET}")
+        print(f"{C_DIM}(Search / Url / 'bm' Bookmards + Enter){C_RESET}")
 
         t = input("> ").strip().lower()
         if not t:
@@ -285,7 +299,7 @@ def show_page(url, history):
 
     paragraphs, links = extract(html, url)
     text_pages = build_text_pages(paragraphs)
-    link_pages = list(paginate(links, 20))
+    link_pages = list(paginate(links, 5)) #num links per block
 
     mode = "text"
     page = 0
@@ -299,8 +313,8 @@ def show_page(url, history):
         if mode == "text":
             for line in text_pages[page]:
                 print(line)
-            print(f"\n{C_DIM}Block {page+1}/{len(text_pages)}{C_RESET}")
-            print(f"{C_CMD}[ENTER]=next  p=prev  l=links  b=back  m=bookmark  bm=saved  h=home  q=quit{C_RESET}")
+            print(f"\n{C_DIM}Block {page+1}/{len(text_pages)} ...press [ENTER] next block{C_RESET}")
+            print(f"{C_CMD}p=prev  l=links  b=back  m=bookmark  bm=saved  h=home  q=quit{C_RESET}")
 
         else:
             if link_pages and 0 <= page < len(link_pages):
