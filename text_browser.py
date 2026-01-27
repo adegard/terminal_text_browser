@@ -177,27 +177,47 @@ def print_search_results(results):
         print(f"{C_LINK}{i}. {C_RESET}{title}")
         print(f"   {C_DIM}{url}{C_RESET}")
     print()
-    print(f"{C_CMD}Select number, h=home, q=quit{C_RESET}")
+    print(f"{C_CMD}Select number, bm=bookmarks, h=home, q=quit{C_RESET}")
+
 
 def home():
     while True:
         print(f"\n{C_TITLE}=== HOME ==={C_RESET}")
-        t = input("> ").strip()
+        print(f"{C_CMD} Write term to search or url or 'bm' for saved  bookmards{C_RESET}")
+
+        t = input("> ").strip().lower()
         if not t:
+            continue
+
+        # NEW: open bookmarks directly from home
+        if t == "bm":
+            bm = bookmark_manager()
+            if bm:
+                return bm
             continue
 
         url = normalize_url(t)
         if url:
             return url
 
+        # Perform search
         results = search_duck(t)
         if not results:
             print(f"{C_ERR}No results.{C_RESET}")
             continue
 
+        # SEARCH RESULTS LOOP
         while True:
             print_search_results(results)
             c = input("Result> ").strip().lower()
+
+            # NEW: open bookmarks from results list
+            if c == "bm":
+                bm = bookmark_manager()
+                if bm:
+                    return bm
+                continue
+
             if c == "q":
                 raise SystemExit
             if c == "h":
@@ -206,6 +226,7 @@ def home():
                 i = int(c)
                 if 1 <= i <= len(results):
                     return results[i-1][1]
+
 
 # ========= BOOKMARK MANAGER =========
 def bookmark_manager():
@@ -272,14 +293,14 @@ def show_page(url, history):
     while True:
         clear_screen()
         cols = shutil.get_terminal_size().columns
-        print(f"{C_TITLE}URL: {url}{C_RESET}")
-        print("=" * cols)
+
+        #print("=" * cols)
 
         if mode == "text":
             for line in text_pages[page]:
                 print(line)
             print(f"\n{C_DIM}Block {page+1}/{len(text_pages)}{C_RESET}")
-            print(f"{C_CMD}[ENTER]=next  p=prev  l=links  m=bookmark bm=saved  h=home  q=quit{C_RESET}")
+            print(f"{C_CMD}[ENTER]=next  p=prev  l=links  b=back  m=bookmark  bm=saved  h=home  q=quit{C_RESET}")
 
         else:
             if link_pages and 0 <= page < len(link_pages):
@@ -292,6 +313,7 @@ def show_page(url, history):
 
             print(f"{C_CMD}[ENTER]=next  p=prev  number=open  t=text  b=back  h=home  q=quit{C_RESET}")
 
+        print(f"{C_TITLE}URL: {url}{C_RESET}")
         raw = input("> ")
         c = raw.strip().lower()
 
