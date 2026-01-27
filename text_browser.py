@@ -166,6 +166,16 @@ def search_duck(q):
             results.append((title, href))
     return results
 
+def shorten_middle(text, max_len):
+    if len(text) <= max_len:
+        return text
+    if max_len < 10:
+        return text[:max_len]  # fallback
+
+    keep = (max_len - 3) // 2
+    return text[:keep] + "..." + text[-keep:]
+
+
 # ========= UI =========
 def clear_screen():
     os.system("clear")
@@ -175,7 +185,10 @@ def print_search_results(results):
     print(f"{C_TITLE}=== SEARCH RESULTS ==={C_RESET}\n")
     for i, (title, url) in enumerate(results, 1):
         print(f"{C_LINK}{i}. {C_RESET}{title}")
-        print(f"   {C_DIM}{url}{C_RESET}")
+        cols = shutil.get_terminal_size().columns
+        short_url = shorten_middle(url, cols - 6)
+        print(f"{C_TITLE}URL: {short_url}{C_RESET}")
+        # print(f"   {C_DIM}{url}{C_RESET}")
     print()
     print(f"{C_CMD}Select number, bm=bookmarks, h=home, q=quit{C_RESET}")
 
@@ -313,21 +326,24 @@ def show_page(url, history):
         if mode == "text":
             for line in text_pages[page]:
                 print(line)
-            print(f"\n{C_DIM}Block {page+1}/{len(text_pages)} ...press [ENTER] next block{C_RESET}")
+            print(f"\n{C_DIM}Block {page+1}/{len(text_pages)} ...press [ENTER] next{C_RESET}")
             print(f"{C_CMD}p=prev  l=links  b=back  m=bookmark  bm=saved  h=home  q=quit{C_RESET}")
 
         else:
             if link_pages and 0 <= page < len(link_pages):
                 for i, (label, link) in enumerate(link_pages[page], 1):
-                    short = label[:60] + "…" if len(label) > 60 else label
-                    print(f"{i}. {short} {C_DIM}→ {link}{C_RESET}")
+                    cols = shutil.get_terminal_size().columns
+                    short_label = label[:60] + "…" if len(label) > 60 else label
+                    short_link = shorten_middle(link, cols - len(short_label) - 10)
+                    print(f"{i}. {short_label} {C_DIM}→ {short_link}{C_RESET}")
                 print(f"\n{C_DIM}Page {page+1}/{len(link_pages)}{C_RESET}")
             else:
                 print("[No links]\n")
 
             print(f"{C_CMD}[ENTER]=next  p=prev  number=open  t=text  b=back  h=home  q=quit{C_RESET}")
-
-        print(f"{C_TITLE}URL: {url}{C_RESET}")
+        cols = shutil.get_terminal_size().columns
+        short_url = shorten_middle(url, cols - 6)
+        print(f"{C_TITLE}{short_url}{C_RESET}")
         raw = input("> ")
         c = raw.strip().lower()
 
