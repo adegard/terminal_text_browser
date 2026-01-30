@@ -121,6 +121,10 @@ def extract(html, base):
     for tag in soup(["script", "style", "nav", "footer", "header"]):
         tag.decompose()
 
+    # MAIN IMAGE
+    main_image = fetch_main_image_url(soup, base)
+
+    # MAIN CONTENT
     candidates = []
     for tag in soup.find_all(["article", "main", "div"]):
         size = len(tag.get_text(strip=True))
@@ -142,7 +146,8 @@ def extract(html, base):
         if not is_ad_or_tracker(href):
             links.append((label if label else href, href))
 
-    return paragraphs, links
+    return paragraphs, links, main_image
+
 
 def chunk_paragraphs(paragraphs, n):
     for i in range(0, len(paragraphs), n):
@@ -302,6 +307,7 @@ def build_text_pages(paragraphs):
         pages.append(lines)
     return pages
 
+
 def show_page(url, history):
     try:
         html = fetch(url)
@@ -310,9 +316,9 @@ def show_page(url, history):
         input("Enter…")
         return None
 
-    paragraphs, links = extract(html, url)
+    paragraphs, links, main_image = extract(html, url)
     text_pages = build_text_pages(paragraphs)
-    link_pages = list(paginate(links, 5)) #num links per block
+    link_pages = list(paginate(links, 5))
 
     mode = "text"
     page = 0
@@ -327,7 +333,8 @@ def show_page(url, history):
             for line in text_pages[page]:
                 print(line)
             print(f"\n{C_DIM}Block {page+1}/{len(text_pages)} ...press [ENTER] next{C_RESET}")
-            print(f"{C_CMD}p=prev  l=links  b=back  m=bookmark  bm=saved  h=home  q=quit{C_RESET}")
+            #print(f"{C_CMD}p=prev  l=links  b=back  m=bookmark  bm=saved  h=home  q=quit{C_RESET}")
+            print(f"{C_CMD}p=prev  l=links  i=image  b=back  m=bookmark  bm=saved  h=home  q=quit{C_RESET}")
 
         else:
             if link_pages and 0 <= page < len(link_pages):
@@ -380,6 +387,22 @@ def show_page(url, history):
             if c == "p" and page > 0:
                 page -= 1
                 continue
+            if c == "i":
+                if not main_image:
+                    input(f"{C_ERR}No image found.{C_RESET} Enter…")
+                    continue
+
+                clear_screen()
+                print(f"{C_TITLE}=== ARTICLE IMAGE ==={C_RESET}\n")
+
+                img_lines = show_image_in_terminal(main_image)
+                for line in img_lines:
+                    print(line)
+
+                print(f"\n{C_CMD}Enter=back{C_RESET}")
+                input()
+                continue
+
 
         # LINK MODE
         else:
@@ -400,6 +423,81 @@ def show_page(url, history):
 
         input(f"{C_ERR}Invalid.{C_RESET} Enter…")
 
+# ========= IMAGE RENDERING (HALF BLOCK) =========
+from PIL import Image
+import requests
+from io import BytesIO
+
+def fetch_main_image_url(soup, base_url):
+    """
+    Try to extract the main article image.
+    Priority:
+    1. <meta property="og:image">
+    2. <img> inside main content
+    """
+    # 1. OG:image
+    og = soup.find("meta", property="og:image")
+    if og and og.get("content"):
+        return urljoin(base_url, og["content"])
+
+    # 2. First <img> inside main content
+    img = soup.find("img")
+    if img and img.get("src"):
+        return urljoin(base_url, img["src"])
+
+    return None
+
+
+def render_image_halfblocks(img, max_width):
+    """
+    Convert an image to terminal half-blocks (▀ / ▄).
+    Auto-resizes to terminal width.
+    """
+    # Convert to RGB
+    img = img.convert("RGB")
+
+    # Each terminal column = 1 pixel wide, but 2 pixels tall (top+bottom)
+    new_width = max_width
+    new_height = int((img.height / img.width) * new_width * 0.5)
+
+    img = img.resize((new_width, new_height * 2))
+
+    pixels = img.load()
+    lines = []
+
+    for y in range(0, img.height, 2):
+        line = ""
+        for x in range(img.width):
+            top = pixels[x, y]
+            bottom = pixels[x, y+1] if y+1 < img.height else top
+
+            # ANSI 24-bit color
+            line += (
+                f"\033[38;2;{top[0]};{top[1]};{top[2]}m"
+                f"\033[48;2;{bottom[0]};{bottom[1]};{bottom[2]}m▀"
+            )
+        line += "\033[0m"
+        lines.append(line)
+
+    return lines
+
+
+def show_image_in_terminal(url):
+    """
+    Download and render the image in half-block mode.
+    """
+    try:
+        r = requests.get(url, timeout=10)
+        r.raise_for_status()
+        img = Image.open(BytesIO(r.content))
+    except Exception as e:
+        return [f"[Image error: {e}]"]
+
+    cols = shutil.get_terminal_size().columns
+    max_width = max(20, cols - 2)
+
+    return render_image_halfblocks(img, max_width)
+
 # ========= MAIN LOOP =========
 def main():
     history = []
@@ -413,4 +511,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
