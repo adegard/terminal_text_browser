@@ -2,21 +2,22 @@
 import os
 import re
 import shutil
-import requests
 import json
+import requests
 from bs4 import BeautifulSoup
 from urllib.parse import (
     urljoin, urlparse, parse_qs, unquote,
     urlunparse
 )
+from PIL import Image
+from io import BytesIO
 
-# ========= CONFIG =========
-
-
-
+# ========= BASIC CONFIG =========
 SAFE_MODE = True
 STRIP_DDG_TRACKING = True
 
+DUCK_LITE = "https://lite.duckduckgo.com/lite/"
+BOOKMARK_FILE = os.path.expanduser("~/.tbrowser_bookmarks")
 
 SEARCH_ENGINES = {
     "duck_lite": "DuckDuckGo Lite",
@@ -26,16 +27,14 @@ SEARCH_ENGINES = {
     "bing": "Bing (text mode)"
 }
 
+# ========= PERSISTENT CONFIG =========
 CONFIG_FILE = os.path.expanduser("~/.tbrowser_config.json")
 
 DEFAULT_CONFIG = {
     "PARAS_PER_PAGE": 2,
-    "DEFAULT_ENGINE": "duck_lite"
+    "DEFAULT_ENGINE": "duck_lite",
+    "SEARCH_RESULTS_PER_PAGE": 10
 }
-
-
-BOOKMARK_FILE = os.path.expanduser("~/.tbrowser_bookmarks")
-
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
@@ -47,16 +46,17 @@ def load_config():
     except Exception:
         return DEFAULT_CONFIG.copy()
 
-    # ensure missing keys are filled
     cfg = DEFAULT_CONFIG.copy()
-    cfg.update({k: v for k, v in data.items() if k in DEFAULT_CONFIG})
+    for k in DEFAULT_CONFIG:
+        if k in data:
+            cfg[k] = data[k]
     return cfg
-
 
 def save_config():
     cfg = {
         "PARAS_PER_PAGE": PARAS_PER_PAGE,
-        "DEFAULT_ENGINE": DEFAULT_ENGINE
+        "DEFAULT_ENGINE": DEFAULT_ENGINE,
+        "SEARCH_RESULTS_PER_PAGE": SEARCH_RESULTS_PER_PAGE
     }
     try:
         with open(CONFIG_FILE, "w") as f:
@@ -64,11 +64,11 @@ def save_config():
     except Exception:
         pass
 
-cfg = load_config()
-PARAS_PER_PAGE = cfg["PARAS_PER_PAGE"]
-DEFAULT_ENGINE = cfg["DEFAULT_ENGINE"]
-
-
+# load config into globals
+_cfg = load_config()
+PARAS_PER_PAGE = _cfg["PARAS_PER_PAGE"]
+DEFAULT_ENGINE = _cfg["DEFAULT_ENGINE"]
+SEARCH_RESULTS_PER_PAGE = _cfg["SEARCH_RESULTS_PER_PAGE"]
 
 # ========= COLORS =========
 C_RESET = "\033[0m"
@@ -169,16 +169,25 @@ def fetch(url):
     r.raise_for_status()
     return r.text
 
+def fetch_main_image_url(soup, base_url):
+    og = soup.find("meta", property="og:image")
+    if og and og.get("content"):
+        return urljoin(base_url, og["content"])
+
+    img = soup.find("img")
+    if img and img.get("src"):
+        return urljoin(base_url, img["src"])
+
+    return None
+
 def extract(html, base):
     soup = BeautifulSoup(html, "html.parser")
 
     for tag in soup(["script", "style", "nav", "footer", "header"]):
         tag.decompose()
 
-    # MAIN IMAGE
     main_image = fetch_main_image_url(soup, base)
 
-    # MAIN CONTENT
     candidates = []
     for tag in soup.find_all(["article", "main", "div"]):
         size = len(tag.get_text(strip=True))
@@ -202,7 +211,6 @@ def extract(html, base):
 
     return paragraphs, links, main_image
 
-
 def chunk_paragraphs(paragraphs, n):
     for i in range(0, len(paragraphs), n):
         yield paragraphs[i:i+n]
@@ -211,7 +219,7 @@ def paginate(items, n=20):
     for i in range(0, len(items), n):
         yield items[i:i+n]
 
-# ========= SEARCH =========
+# ========= SEARCH IMPLEMENTATIONS =========
 def search_duck(q):
     r = session.get(DUCK_LITE + "?q=" + q, timeout=15)
     r.raise_for_status()
@@ -225,20 +233,19 @@ def search_duck(q):
             results.append((title, href))
     return results
 
-def search_duck(q):
-    url = "https://lite.duckduckgo.com/lite/?q=" + q
+def search_duck_html(q):
+    url = "https://duckduckgo.com/html/?q=" + q
     r = session.get(url, timeout=15)
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "html.parser")
 
     results = []
-    for a in soup.select("a.result-link"):
+    for a in soup.select("a.result__a"):
         title = a.get_text(" ", strip=True)
         href = unwrap_generic_redirect(a.get("href"))
         if not is_ad_or_tracker(href):
             results.append((title, href))
     return results
-
 
 def search_brave(q):
     url = "https://search.brave.com/search?q=" + q + "&source=web"
@@ -254,9 +261,7 @@ def search_brave(q):
             results.append((title, href))
     return results
 
-
 def search_google_text(q):
-    # Using textise proxy to avoid JS
     url = "https://textise.net/showtext.aspx?strURL=https://www.google.com/search?q=" + q
     r = session.get(url, timeout=15)
     r.raise_for_status()
@@ -273,7 +278,6 @@ def search_google_text(q):
         if title and not is_ad_or_tracker(href):
             results.append((title, href))
     return results
-
 
 def search_bing_text(q):
     url = "https://www.bing.com/search?q=" + q + "&form=MSNVS"
@@ -300,44 +304,42 @@ def search(q):
         return search_google_text(q)
     if DEFAULT_ENGINE == "bing":
         return search_bing_text(q)
-
     return search_duck(q)
-
 
 def shorten_middle(text, max_len):
     if len(text) <= max_len:
         return text
     if max_len < 10:
-        return text[:max_len]  # fallback
-
+        return text[:max_len]
     keep = (max_len - 3) // 2
     return text[:keep] + "..." + text[-keep:]
 
-
-# ========= UI =========
+# ========= UI HELPERS =========
 def clear_screen():
     os.system("clear")
 
-def print_search_results(results):
+def print_search_results_page(results_page, page_idx, total_pages):
     clear_screen()
     print(f"{C_TITLE}=== SEARCH RESULTS ==={C_RESET}\n")
-    for i, (title, url) in enumerate(results, 1):
+    for i, (title, url) in enumerate(results_page, 1):
         print(f"{C_LINK}{i}. {C_RESET}{title}")
         cols = shutil.get_terminal_size().columns
         short_url = shorten_middle(url, cols - 6)
         print(f"{C_TITLE}URL: {short_url}{C_RESET}")
-        # print(f"   {C_DIM}{url}{C_RESET}")
     print()
-    print(f"{C_CMD}Select number, bm=bookmarks, h=home, q=quit{C_RESET}")
+    print(f"{C_DIM}Page {page_idx+1}/{total_pages}{C_RESET}")
+    print(f"{C_CMD}number=open  [ENTER]=next  p=prev  bm=bookmarks  h=home  q=quit{C_RESET}")
 
+# ========= SETTINGS MENU =========
 def settings_menu():
-    global PARAS_PER_PAGE, DEFAULT_ENGINE
+    global PARAS_PER_PAGE, DEFAULT_ENGINE, SEARCH_RESULTS_PER_PAGE
 
     while True:
         clear_screen()
         print(f"{C_TITLE}=== SETTINGS ==={C_RESET}\n")
         print(f"1. Paragraphs per page: {PARAS_PER_PAGE}")
         print(f"2. Search engine: {SEARCH_ENGINES[DEFAULT_ENGINE]}")
+        print(f"3. Search results per page: {SEARCH_RESULTS_PER_PAGE}")
         print("\nq = back\n")
 
         c = input("> ").strip().lower()
@@ -346,7 +348,7 @@ def settings_menu():
             return
 
         if c == "1":
-            val = input("Paragraphs per page (1-20): ").strip()
+            val = input("Paragraphs per page (1–20): ").strip()
             if val.isdigit() and 1 <= int(val) <= 20:
                 PARAS_PER_PAGE = int(val)
                 save_config()
@@ -355,8 +357,9 @@ def settings_menu():
         if c == "2":
             clear_screen()
             print(f"{C_TITLE}=== SEARCH ENGINES ==={C_RESET}\n")
-            for i, (key, name) in enumerate(SEARCH_ENGINES.items(), 1):
-                print(f"{i}. {name}")
+            keys = list(SEARCH_ENGINES.keys())
+            for i, key in enumerate(keys, 1):
+                print(f"{i}. {SEARCH_ENGINES[key]}")
             print("\nq = back\n")
 
             s = input("> ").strip().lower()
@@ -364,14 +367,22 @@ def settings_menu():
                 continue
             if s.isdigit():
                 idx = int(s) - 1
-                if 0 <= idx < len(SEARCH_ENGINES):
-                    DEFAULT_ENGINE = list(SEARCH_ENGINES.keys())[idx]
+                if 0 <= idx < len(keys):
+                    DEFAULT_ENGINE = keys[idx]
                     save_config()
             continue
 
+        if c == "3":
+            val = input("Search results per page (5–50): ").strip()
+            if val.isdigit() and 5 <= int(val) <= 50:
+                SEARCH_RESULTS_PER_PAGE = int(val)
+                save_config()
+            continue
 
+# ========= HOME =========
 def home():
     while True:
+        clear_screen()
         print(r"""
            _.-''''''-._
         .-'  _     _   '-.
@@ -384,58 +395,79 @@ def home():
       '.  '._   _.'  .'     /
         '-._'''''_.-'     .'
              '-.....-'
-
         """)
         print(f"\n{C_TITLE}=== TEXT BROWSER V.0 ==={C_RESET}")
-        print(f"{C_DIM}(Search / Url / bm=bookmarks / s=settings){C_RESET}")
+        print(f"{C_DIM}(Search / Url / bm=bookmarks / s=settings / q=quit){C_RESET}")
 
-        t = input("> ").strip().lower()
+        t = input("> ").strip()
         if not t:
             continue
 
-        # NEW: open bookmarks directly from home
-        if t == "bm":
-            bm = bookmark_manager()
-            if bm:
-                return bm
-            continue
-        
-        if t == "s":
+        low = t.lower()
+
+        if low == "q":
+            return ("quit",)
+
+        if low == "bm":
+            return ("bookmarks",)
+
+        if low == "s":
             settings_menu()
             continue
 
-
         url = normalize_url(t)
         if url:
-            return url
+            return ("open_url", url, "direct")
 
-        # Perform search
-        results = search_duck(t)
-        if not results:
-            print(f"{C_ERR}No results.{C_RESET}")
+        # treat as search query
+        return ("search", t)
+
+# ========= SEARCH RESULTS LOOP =========
+def search_and_select(query):
+    results = search(query)
+    if not results:
+        print(f"{C_ERR}No results.{C_RESET}")
+        input("Enter…")
+        return None
+
+    pages = list(paginate(results, SEARCH_RESULTS_PER_PAGE))
+    page_idx = 0
+
+    while True:
+        current_page = pages[page_idx]
+        print_search_results_page(current_page, page_idx, len(pages))
+        raw = input("Result> ")
+        c = raw.strip().lower()
+
+        if raw == "":
+            c = "next"
+
+        if c == "q":
+            return ("quit",)
+
+        if c == "h":
+            return None
+
+        if c == "bm":
+            url = bookmark_manager()
+            if url:
+                return ("url", url, "bm")
             continue
 
-        # SEARCH RESULTS LOOP
-        while True:
-            print_search_results(results)
-            c = input("Result> ").strip().lower()
+        if c == "next" and page_idx < len(pages) - 1:
+            page_idx += 1
+            continue
 
-            # NEW: open bookmarks from results list
-            if c == "bm":
-                bm = bookmark_manager()
-                if bm:
-                    return bm
-                continue
+        if c == "p" and page_idx > 0:
+            page_idx -= 1
+            continue
 
-            if c == "q":
-                raise SystemExit
-            if c == "h":
-                break
-            if c.isdigit():
-                i = int(c)
-                if 1 <= i <= len(results):
-                    return results[i-1][1]
+        if c.isdigit():
+            i = int(c)
+            if 1 <= i <= len(current_page):
+                return ("url", current_page[i-1][1], "search")
 
+        input(f"{C_ERR}Invalid.{C_RESET} Enter…")
 
 # ========= BOOKMARK MANAGER =========
 def bookmark_manager():
@@ -484,14 +516,48 @@ def build_text_pages(paragraphs):
         pages.append(lines)
     return pages
 
+def render_image_halfblocks(img, max_width):
+    img = img.convert("RGB")
+    new_width = max_width
+    new_height = int((img.height / img.width) * new_width * 0.5)
+    img = img.resize((new_width, new_height * 2))
 
-def show_page(url, history):
+    pixels = img.load()
+    lines = []
+
+    for y in range(0, img.height, 2):
+        line = ""
+        for x in range(img.width):
+            top = pixels[x, y]
+            bottom = pixels[x, y+1] if y+1 < img.height else top
+            line += (
+                f"\033[38;2;{top[0]};{top[1]};{top[2]}m"
+                f"\033[48;2;{bottom[0]};{bottom[1]};{bottom[2]}m▀"
+            )
+        line += "\033[0m"
+        lines.append(line)
+
+    return lines
+
+def show_image_in_terminal(url):
+    try:
+        r = requests.get(url, timeout=10)
+        r.raise_for_status()
+        img = Image.open(BytesIO(r.content))
+    except Exception as e:
+        return [f"[Image error: {e}]"]
+
+    cols = shutil.get_terminal_size().columns
+    max_width = max(20, cols - 2)
+    return render_image_halfblocks(img, max_width)
+
+def show_page(url, origin):
     try:
         html = fetch(url)
     except Exception as e:
         print(f"{C_ERR}{e}{C_RESET}")
         input("Enter…")
-        return None
+        return "home"
 
     paragraphs, links, main_image = extract(html, url)
     text_pages = build_text_pages(paragraphs)
@@ -504,19 +570,14 @@ def show_page(url, history):
         clear_screen()
         cols = shutil.get_terminal_size().columns
 
-        #print("=" * cols)
-
         if mode == "text":
             for line in text_pages[page]:
                 print(line)
             print(f"\n{C_DIM}Block {page+1}/{len(text_pages)} ...press [ENTER] next{C_RESET}")
-            #print(f"{C_CMD}p=prev  l=links  b=back  m=bookmark  bm=saved  h=home  q=quit{C_RESET}")
             print(f"{C_CMD}p=prev  l=links  i=image  b=back  m=bookmark  bm=saved  h=home  q=quit{C_RESET}")
-
         else:
             if link_pages and 0 <= page < len(link_pages):
                 for i, (label, link) in enumerate(link_pages[page], 1):
-                    cols = shutil.get_terminal_size().columns
                     short_label = label[:60] + "…" if len(label) > 60 else label
                     short_link = shorten_middle(link, cols - len(short_label) - 10)
                     print(f"{i}. {short_label} {C_DIM}→ {short_link}{C_RESET}")
@@ -525,23 +586,25 @@ def show_page(url, history):
                 print("[No links]\n")
 
             print(f"{C_CMD}[ENTER]=next  p=prev  number=open  t=text  b=back  h=home  q=quit{C_RESET}")
-        cols = shutil.get_terminal_size().columns
+
         short_url = shorten_middle(url, cols - 6)
         print(f"{C_TITLE}{short_url}{C_RESET}")
         raw = input("> ")
         c = raw.strip().lower()
 
-        # ENTER only → next
         if raw == "":
             c = "next"
 
-        # Global
         if c == "q":
-            raise SystemExit
+            return "quit"
         if c == "h":
-            return None
+            return "home"
         if c == "b":
-            return history.pop() if history else None
+            if origin == "search":
+                return "back_search"
+            if origin == "bm":
+                return "back_bm"
+            return "home"
         if c == "m":
             save_bookmark(url)
             input("Saved. Enter…")
@@ -549,10 +612,9 @@ def show_page(url, history):
         if c == "bm":
             bm = bookmark_manager()
             if bm:
-                return bm
+                return bm  # open bookmark URL, origin handled by main
             continue
 
-        # TEXT MODE
         if mode == "text":
             if c == "l":
                 mode = "links"
@@ -579,9 +641,6 @@ def show_page(url, history):
                 print(f"\n{C_CMD}Enter=back{C_RESET}")
                 input()
                 continue
-
-
-        # LINK MODE
         else:
             if c == "t":
                 mode = "text"
@@ -600,91 +659,77 @@ def show_page(url, history):
 
         input(f"{C_ERR}Invalid.{C_RESET} Enter…")
 
-# ========= IMAGE RENDERING (HALF BLOCK) =========
-from PIL import Image
-import requests
-from io import BytesIO
-
-def fetch_main_image_url(soup, base_url):
-    """
-    Try to extract the main article image.
-    Priority:
-    1. <meta property="og:image">
-    2. <img> inside main content
-    """
-    # 1. OG:image
-    og = soup.find("meta", property="og:image")
-    if og and og.get("content"):
-        return urljoin(base_url, og["content"])
-
-    # 2. First <img> inside main content
-    img = soup.find("img")
-    if img and img.get("src"):
-        return urljoin(base_url, img["src"])
-
-    return None
-
-
-def render_image_halfblocks(img, max_width):
-    """
-    Convert an image to terminal half-blocks (▀ / ▄).
-    Auto-resizes to terminal width.
-    """
-    # Convert to RGB
-    img = img.convert("RGB")
-
-    # Each terminal column = 1 pixel wide, but 2 pixels tall (top+bottom)
-    new_width = max_width
-    new_height = int((img.height / img.width) * new_width * 0.5)
-
-    img = img.resize((new_width, new_height * 2))
-
-    pixels = img.load()
-    lines = []
-
-    for y in range(0, img.height, 2):
-        line = ""
-        for x in range(img.width):
-            top = pixels[x, y]
-            bottom = pixels[x, y+1] if y+1 < img.height else top
-
-            # ANSI 24-bit color
-            line += (
-                f"\033[38;2;{top[0]};{top[1]};{top[2]}m"
-                f"\033[48;2;{bottom[0]};{bottom[1]};{bottom[2]}m▀"
-            )
-        line += "\033[0m"
-        lines.append(line)
-
-    return lines
-
-
-def show_image_in_terminal(url):
-    """
-    Download and render the image in half-block mode.
-    """
-    try:
-        r = requests.get(url, timeout=10)
-        r.raise_for_status()
-        img = Image.open(BytesIO(r.content))
-    except Exception as e:
-        return [f"[Image error: {e}]"]
-
-    cols = shutil.get_terminal_size().columns
-    max_width = max(20, cols - 2)
-
-    return render_image_halfblocks(img, max_width)
-
 # ========= MAIN LOOP =========
 def main():
-    history = []
-    current = None
+    mode = "home"
+    current_url = None
+    origin = "direct"
+    last_search_query = None
 
     while True:
-        if current is None:
-            current = home()
-        history.append(current)
-        current = show_page(current, history)
+        if mode == "home":
+            action = home()
+            if action[0] == "quit":
+                break
+            if action[0] == "bookmarks":
+                mode = "bookmarks"
+                continue
+            if action[0] == "open_url":
+                current_url = action[1]
+                origin = action[2]
+                mode = "page"
+                continue
+            if action[0] == "search":
+                last_search_query = action[1]
+                mode = "search"
+                continue
+
+        elif mode == "search":
+            res = search_and_select(last_search_query)
+            if res is None:
+                mode = "home"
+                continue
+            if res[0] == "quit":
+                break
+            if res[0] == "url":
+                current_url = res[1]
+                origin = res[2]
+                mode = "page"
+                continue
+
+        elif mode == "bookmarks":
+            url = bookmark_manager()
+            if url is None:
+                mode = "home"
+                continue
+            current_url = url
+            origin = "bm"
+            mode = "page"
+            continue
+
+        elif mode == "page":
+            nav = show_page(current_url, origin)
+            if nav == "quit":
+                break
+            if nav == "home":
+                mode = "home"
+                current_url = None
+                origin = "direct"
+                continue
+            if nav == "back_search":
+                if last_search_query is None:
+                    mode = "home"
+                else:
+                    mode = "search"
+                continue
+            if nav == "back_bm":
+                mode = "bookmarks"
+                continue
+            if isinstance(nav, str):
+                # navigate to new URL, keep same origin unless it's from bm
+                current_url = nav
+                # if we came from bm via bm command inside page, origin stays as before
+                continue
 
 if __name__ == "__main__":
     main()
