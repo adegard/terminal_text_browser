@@ -3,6 +3,7 @@ import os
 import re
 import shutil
 import requests
+import json
 from bs4 import BeautifulSoup
 from urllib.parse import (
     urljoin, urlparse, parse_qs, unquote,
@@ -10,11 +11,64 @@ from urllib.parse import (
 )
 
 # ========= CONFIG =========
+
+
+
 SAFE_MODE = True
 STRIP_DDG_TRACKING = True
-DUCK_LITE = "https://lite.duckduckgo.com/lite/"
+
+
+SEARCH_ENGINES = {
+    "duck_lite": "DuckDuckGo Lite",
+    "duck_html": "DuckDuckGo HTML",
+    "brave": "Brave Search",
+    "google": "Google (text mode)",
+    "bing": "Bing (text mode)"
+}
+
+CONFIG_FILE = os.path.expanduser("~/.tbrowser_config.json")
+
+DEFAULT_CONFIG = {
+    "PARAS_PER_PAGE": 2,
+    "DEFAULT_ENGINE": "duck_lite"
+}
+
+
 BOOKMARK_FILE = os.path.expanduser("~/.tbrowser_bookmarks")
-PARAS_PER_PAGE = 2
+
+
+def load_config():
+    if not os.path.exists(CONFIG_FILE):
+        return DEFAULT_CONFIG.copy()
+
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            data = json.load(f)
+    except Exception:
+        return DEFAULT_CONFIG.copy()
+
+    # ensure missing keys are filled
+    cfg = DEFAULT_CONFIG.copy()
+    cfg.update({k: v for k, v in data.items() if k in DEFAULT_CONFIG})
+    return cfg
+
+
+def save_config():
+    cfg = {
+        "PARAS_PER_PAGE": PARAS_PER_PAGE,
+        "DEFAULT_ENGINE": DEFAULT_ENGINE
+    }
+    try:
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(cfg, f, indent=2)
+    except Exception:
+        pass
+
+cfg = load_config()
+PARAS_PER_PAGE = cfg["PARAS_PER_PAGE"]
+DEFAULT_ENGINE = cfg["DEFAULT_ENGINE"]
+
+
 
 # ========= COLORS =========
 C_RESET = "\033[0m"
@@ -171,6 +225,85 @@ def search_duck(q):
             results.append((title, href))
     return results
 
+def search_duck(q):
+    url = "https://lite.duckduckgo.com/lite/?q=" + q
+    r = session.get(url, timeout=15)
+    r.raise_for_status()
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    results = []
+    for a in soup.select("a.result-link"):
+        title = a.get_text(" ", strip=True)
+        href = unwrap_generic_redirect(a.get("href"))
+        if not is_ad_or_tracker(href):
+            results.append((title, href))
+    return results
+
+
+def search_brave(q):
+    url = "https://search.brave.com/search?q=" + q + "&source=web"
+    r = session.get(url, timeout=15)
+    r.raise_for_status()
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    results = []
+    for a in soup.select("a.result-header"):
+        title = a.get_text(" ", strip=True)
+        href = unwrap_generic_redirect(a.get("href"))
+        if not is_ad_or_tracker(href):
+            results.append((title, href))
+    return results
+
+
+def search_google_text(q):
+    # Using textise proxy to avoid JS
+    url = "https://textise.net/showtext.aspx?strURL=https://www.google.com/search?q=" + q
+    r = session.get(url, timeout=15)
+    r.raise_for_status()
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    results = []
+    for a in soup.find_all("a"):
+        href = a.get("href")
+        if not href:
+            continue
+        if "http" not in href:
+            continue
+        title = a.get_text(" ", strip=True)
+        if title and not is_ad_or_tracker(href):
+            results.append((title, href))
+    return results
+
+
+def search_bing_text(q):
+    url = "https://www.bing.com/search?q=" + q + "&form=MSNVS"
+    r = session.get(url, timeout=15)
+    r.raise_for_status()
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    results = []
+    for li in soup.select("li.b_algo h2 a"):
+        title = li.get_text(" ", strip=True)
+        href = unwrap_generic_redirect(li.get("href"))
+        if not is_ad_or_tracker(href):
+            results.append((title, href))
+    return results
+
+def search(q):
+    if DEFAULT_ENGINE == "duck_lite":
+        return search_duck(q)
+    if DEFAULT_ENGINE == "duck_html":
+        return search_duck_html(q)
+    if DEFAULT_ENGINE == "brave":
+        return search_brave(q)
+    if DEFAULT_ENGINE == "google":
+        return search_google_text(q)
+    if DEFAULT_ENGINE == "bing":
+        return search_bing_text(q)
+
+    return search_duck(q)
+
+
 def shorten_middle(text, max_len):
     if len(text) <= max_len:
         return text
@@ -197,6 +330,45 @@ def print_search_results(results):
     print()
     print(f"{C_CMD}Select number, bm=bookmarks, h=home, q=quit{C_RESET}")
 
+def settings_menu():
+    global PARAS_PER_PAGE, DEFAULT_ENGINE
+
+    while True:
+        clear_screen()
+        print(f"{C_TITLE}=== SETTINGS ==={C_RESET}\n")
+        print(f"1. Paragraphs per page: {PARAS_PER_PAGE}")
+        print(f"2. Search engine: {SEARCH_ENGINES[DEFAULT_ENGINE]}")
+        print("\nq = back\n")
+
+        c = input("> ").strip().lower()
+
+        if c == "q":
+            return
+
+        if c == "1":
+            val = input("Paragraphs per page (1-20): ").strip()
+            if val.isdigit() and 1 <= int(val) <= 20:
+                PARAS_PER_PAGE = int(val)
+                save_config()
+            continue
+
+        if c == "2":
+            clear_screen()
+            print(f"{C_TITLE}=== SEARCH ENGINES ==={C_RESET}\n")
+            for i, (key, name) in enumerate(SEARCH_ENGINES.items(), 1):
+                print(f"{i}. {name}")
+            print("\nq = back\n")
+
+            s = input("> ").strip().lower()
+            if s == "q":
+                continue
+            if s.isdigit():
+                idx = int(s) - 1
+                if 0 <= idx < len(SEARCH_ENGINES):
+                    DEFAULT_ENGINE = list(SEARCH_ENGINES.keys())[idx]
+                    save_config()
+            continue
+
 
 def home():
     while True:
@@ -215,7 +387,7 @@ def home():
 
         """)
         print(f"\n{C_TITLE}=== TEXT BROWSER V.0 ==={C_RESET}")
-        print(f"{C_DIM}(Search / Url / 'bm' Bookmards + Enter){C_RESET}")
+        print(f"{C_DIM}(Search / Url / bm=bookmarks / s=settings){C_RESET}")
 
         t = input("> ").strip().lower()
         if not t:
@@ -227,6 +399,11 @@ def home():
             if bm:
                 return bm
             continue
+        
+        if t == "s":
+            settings_menu()
+            continue
+
 
         url = normalize_url(t)
         if url:
