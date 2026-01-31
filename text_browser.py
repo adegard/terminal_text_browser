@@ -262,22 +262,32 @@ def search_brave(q):
     return results
 
 def search_google_text(q):
-    url = "https://textise.net/showtext.aspx?strURL=https://www.google.com/search?q=" + q
-    r = session.get(url, timeout=15)
-    r.raise_for_status()
-    soup = BeautifulSoup(r.text, "html.parser")
+    try:
+        url = "https://textise.net/showtext.aspx?strURL=https://www.google.com/search?q=" + q
+        r = session.get(url, timeout=15)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
 
-    results = []
-    for a in soup.find_all("a"):
-        href = a.get("href")
-        if not href:
-            continue
-        if "http" not in href:
-            continue
-        title = a.get_text(" ", strip=True)
-        if title and not is_ad_or_tracker(href):
-            results.append((title, href))
-    return results
+        results = []
+        for a in soup.find_all("a"):
+            href = a.get("href")
+            if not href:
+                continue
+            if "http" not in href:
+                continue
+            title = a.get_text(" ", strip=True)
+            if title and not is_ad_or_tracker(href):
+                results.append((title, href))
+
+        # If Google returned nothing, fallback
+        if not results:
+            return search_duck(q)
+
+        return results
+
+    except Exception:
+        # Google blocked us → fallback
+        return search_duck(q)
 
 def search_bing_text(q):
     url = "https://www.bing.com/search?q=" + q + "&form=MSNVS"
