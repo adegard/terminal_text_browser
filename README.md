@@ -1,5 +1,5 @@
 # === TEXT BROWSER V.0 ===
-web browser in terminal (also termux) in python
+Text Web browser in terminal (also termux) in python. Perfect for small screen devices
 </br>
 
            _.-''''''-._
@@ -22,11 +22,11 @@ web browser in terminal (also termux) in python
 - Accepts:
   - Direct URLs (`https://example.com`)
   - Domain shortcuts (`example.com`)
-  - Search queries (sent to DuckDuckGo Lite)
+  - Search queries (sent to DuckDuckGo Lite, check other provider in settings)
 - Commands:
   - `bm` — open bookmark manager
   - `q` — quit the application
-
+  - `s` — settings
 ---
 
 ## 🔍 Search
@@ -52,7 +52,7 @@ web browser in terminal (also termux) in python
   - `ENTER` — next block
   - `p` — previous block
   - `l` — switch to link mode
-  - `b` — go back in history
+  - `b` — go back on search results
   - `m` — save current page as bookmark
   - `bm` — open bookmark manager
   - `h` — home
@@ -67,6 +67,7 @@ web browser in terminal (also termux) in python
   - `p` — previous link page
   - `t` — return to text mode
   - `b` — go back in history
+  - `i` — show main image in terminal (block-colors)
   - `bm` — open bookmark manager
   - `h` — home
   - `q` — quit
@@ -113,10 +114,3 @@ web browser in terminal (also termux) in python
   - Links
 
 ---
-
-## ⚙️ Configuration
-- `SAFE_MODE` — block ad/tracker domains
-- `STRIP_DDG_TRACKING` — remove DuckDuckGo tracking params
-- `PARAS_PER_PAGE` — number of paragraphs per text page
-- `DUCK_LITE` — search endpoint
-
