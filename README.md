@@ -1,5 +1,5 @@
 # === TEXT BROWSER V.0 ===
-Text Web browser in terminal (also termux) in python. Perfect for small screen devices
+Text Web browser in terminal (also termux) in python. Perfect for small screen devices and reading like a book online with bookmarking exact page and last paragraph position (called block) 
 </br>
 
            _.-''''''-._
@@ -53,7 +53,7 @@ Text Web browser in terminal (also termux) in python. Perfect for small screen d
   - `p` — previous block
   - `l` — switch to link mode
   - `b` — go back on search results
-  - `m` — save current page as bookmark
+  - `m` — save current page and block as bookmark
   - `bm` — open bookmark manager
   - `h` — home
   - `q` — quit
@@ -77,11 +77,11 @@ Text Web browser in terminal (also termux) in python. Perfect for small screen d
 ## 🔖 Bookmark Manager
 - Stores bookmarks in `~/.tbrowser_bookmarks`
 - Features:
-  - List all saved URLs
+  - List all saved URLs, with last read block
   - Open a bookmark
   - Delete a bookmark (`d<number>`)
 - Commands:
-  - `<number>` — open bookmark
+  - `<number>` — open bookmark, at last read block
   - `d<number>` — delete bookmark
   - `q` — return to previous screen
 
