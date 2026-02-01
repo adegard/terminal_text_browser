@@ -126,31 +126,24 @@ def load_bookmarks():
                     block = 0
                 bookmarks.append((url, block))
             else:
-                # old format: only URL, default block 0
                 bookmarks.append((line, 0))
 
     return bookmarks
 
 def save_bookmark(url, block_index):
     bookmarks = load_bookmarks()
-
-    # Check if URL already exists → update it
     updated = False
     for i, (u, b) in enumerate(bookmarks):
         if u == url:
             bookmarks[i] = (url, block_index)
             updated = True
             break
-
-    # If not found → append new entry
     if not updated:
         bookmarks.append((url, block_index))
 
-    # Rewrite entire file
     with open(BOOKMARK_FILE, "w") as f:
         for u, b in bookmarks:
             f.write(f"{u}|||{b}\n")
-
 
 def delete_bookmark(i):
     b = load_bookmarks()
@@ -215,13 +208,39 @@ def fetch_main_image_url(soup, base_url):
 
     return None
 
-def extract(html, base):
+def extract_single_page(html, base):
     soup = BeautifulSoup(html, "html.parser")
 
     for tag in soup(["script", "style", "nav", "footer", "header"]):
         tag.decompose()
 
-    main_image = fetch_main_image_url(soup, base)
+    # Wattpad / generic <pre> special case
+    pre_blocks = soup.find_all("pre")
+    if pre_blocks:
+        paragraphs = []
+        for pre in pre_blocks:
+            ps = pre.find_all("p")
+            if ps:
+                for p in ps:
+                    raw = p.get_text(" ", strip=True)
+                    clean = clean_paragraph(raw)
+                    if len(clean) > 5:
+                        paragraphs.append(clean)
+            else:
+                raw = pre.get_text(" ", strip=True)
+                clean = clean_paragraph(raw)
+                if len(clean) > 20:
+                    paragraphs.append(clean)
+
+        links = []
+        for a in soup.find_all("a", href=True):
+            label = a.get_text(" ", strip=True)
+            href = unwrap_generic_redirect(urljoin(base, a["href"]))
+            if not is_ad_or_tracker(href):
+                links.append((label if label else href, href))
+
+        main_image = fetch_main_image_url(soup, base)
+        return paragraphs, links, main_image
 
     candidates = []
     for tag in soup.find_all(["article", "main", "div"]):
@@ -244,6 +263,7 @@ def extract(html, base):
         if not is_ad_or_tracker(href):
             links.append((label if label else href, href))
 
+    main_image = fetch_main_image_url(soup, base)
     return paragraphs, links, main_image
 
 def chunk_paragraphs(paragraphs, n):
@@ -314,14 +334,12 @@ def search_google_text(q):
             if title and not is_ad_or_tracker(href):
                 results.append((title, href))
 
-        # If Google returned nothing, fallback
         if not results:
             return search_duck(q)
 
         return results
 
     except Exception:
-        # Google blocked us → fallback
         return search_duck(q)
 
 def search_bing_text(q):
@@ -464,7 +482,6 @@ def home():
         if url:
             return ("open_url", url, "direct")
 
-        # treat as search query
         return ("search", t)
 
 # ========= SEARCH RESULTS LOOP =========
@@ -597,6 +614,39 @@ def show_image_in_terminal(url):
     max_width = max(20, cols - 2)
     return render_image_halfblocks(img, max_width)
 
+def try_load_next_part(url, paragraphs):
+    # Detect current page number
+    m = re.search(r"/page/(\d+)", url)
+    if m:
+        current_page = int(m.group(1))
+        base = url[:url.rfind("/page/")]
+    else:
+        current_page = 1
+        base = url.rstrip("/")
+
+    next_page = current_page + 1
+    next_url = f"{base}/page/{next_page}"
+
+    try:
+        html = fetch(next_url)
+    except Exception:
+        return None, url  # no next page
+
+    new_pars, _, _ = extract_single_page(html, next_url)
+    if not new_pars:
+        return None, url  # no content
+
+    # Deduplicate
+    existing = set(paragraphs)
+    added = [p for p in new_pars if p not in existing]
+
+    if not added:
+        return None, url  # no new content
+
+    paragraphs.extend(added)
+    return paragraphs, next_url
+
+
 def show_page(url, origin, start_block=0):
     try:
         html = fetch(url)
@@ -605,20 +655,29 @@ def show_page(url, origin, start_block=0):
         input("Enter…")
         return "home"
 
-    paragraphs, links, main_image = extract(html, url)
+    paragraphs, links, main_image = extract_single_page(html, url)
     text_pages = build_text_pages(paragraphs)
     link_pages = list(paginate(links, 5))
 
     mode = "text"
     page = start_block if 0 <= start_block < len(text_pages) else 0
+    next_part_loaded = False
 
     while True:
         clear_screen()
         cols = shutil.get_terminal_size().columns
 
         if mode == "text":
+            # --- FIX: clamp page index to avoid crash ---
+            if page >= len(text_pages):
+                page = len(text_pages) - 1
+            if page < 0:
+                page = 0
+            # -------------------------------------------
+
             for line in text_pages[page]:
                 print(line)
+
             print(f"\n{C_DIM}Block {page+1}/{len(text_pages)} ...press [ENTER] next{C_RESET}")
             print(f"{C_CMD}p=prev  l=links  i=image  b=back  m=bookmark  bm=saved  h=home  q=quit{C_RESET}")
         else:
@@ -658,7 +717,7 @@ def show_page(url, origin, start_block=0):
         if c == "bm":
             bm = bookmark_manager()
             if bm:
-                return bm  # (url, block)
+                return bm
             continue
 
         if mode == "text":
@@ -666,8 +725,35 @@ def show_page(url, origin, start_block=0):
                 mode = "links"
                 page = 0
                 continue
-            if c == "next" and page < len(text_pages) - 1:
-                page += 1
+            if c == "next":
+                if page < len(text_pages) - 1:
+                    page += 1
+                    continue
+                # At last block: try to discover next part
+                #new_pars, next_part_loaded = try_load_next_part(url, paragraphs, next_part_loaded)
+                result = try_load_next_part(url, paragraphs)
+                if result:
+                    paragraphs, url = result
+                    text_pages = build_text_pages(paragraphs)
+                    continue
+
+                if new_pars is not None:
+                    paragraphs = new_pars
+                    text_pages = build_text_pages(paragraphs)
+
+                    # Fix: ensure page index is valid after rebuild
+                    if page >= len(text_pages):
+                        page = len(text_pages) - 1
+                    if page < 0:
+                        page = 0
+
+                    # Move forward if possible
+                    if page < len(text_pages) - 1:
+                        page += 1
+                    continue
+
+                # No more content
+                input(f"{C_DIM}End of content.{C_RESET} Enter…")
                 continue
             if c == "p" and page > 0:
                 page -= 1
@@ -776,13 +862,11 @@ def main():
                 mode = "bookmarks"
                 continue
             if isinstance(nav, tuple):
-                # came from bm inside page
                 current_url, start_block = nav
                 origin = "bm"
                 mode = "page"
                 continue
             if isinstance(nav, str):
-                # navigate to new URL, reset block
                 current_url = nav
                 start_block = 0
                 continue
