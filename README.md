@@ -108,6 +108,7 @@ Text Web browser in terminal (also termux) in python. Perfect for small screen d
   - Styles
   - Headers/footers/navbars
 - Detects main content block by size
+- Incremental pagination (tested on Wattpad, with url change while scrolling eg. /page/2 ..etc) 
 - Extracts:
   - Paragraphs
   - List items
