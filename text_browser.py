@@ -110,20 +110,55 @@ def wrap(text, width):
 def load_bookmarks():
     if not os.path.exists(BOOKMARK_FILE):
         return []
-    with open(BOOKMARK_FILE) as f:
-        return [x.strip() for x in f if x.strip()]
 
-def save_bookmark(url):
-    with open(BOOKMARK_FILE, "a") as f:
-        f.write(url + "\n")
+    bookmarks = []
+    with open(BOOKMARK_FILE) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+
+            if "|||" in line:
+                url, block = line.split("|||", 1)
+                try:
+                    block = int(block)
+                except Exception:
+                    block = 0
+                bookmarks.append((url, block))
+            else:
+                # old format: only URL, default block 0
+                bookmarks.append((line, 0))
+
+    return bookmarks
+
+def save_bookmark(url, block_index):
+    bookmarks = load_bookmarks()
+
+    # Check if URL already exists → update it
+    updated = False
+    for i, (u, b) in enumerate(bookmarks):
+        if u == url:
+            bookmarks[i] = (url, block_index)
+            updated = True
+            break
+
+    # If not found → append new entry
+    if not updated:
+        bookmarks.append((url, block_index))
+
+    # Rewrite entire file
+    with open(BOOKMARK_FILE, "w") as f:
+        for u, b in bookmarks:
+            f.write(f"{u}|||{b}\n")
+
 
 def delete_bookmark(i):
     b = load_bookmarks()
     if 0 <= i < len(b):
         del b[i]
         with open(BOOKMARK_FILE, "w") as f:
-            for x in b:
-                f.write(x + "\n")
+            for url, block in b:
+                f.write(f"{url}|||{block}\n")
 
 # ========= URL HELPERS =========
 def normalize_url(t):
@@ -459,9 +494,10 @@ def search_and_select(query):
             return None
 
         if c == "bm":
-            url = bookmark_manager()
-            if url:
-                return ("url", url, "bm")
+            bm = bookmark_manager()
+            if bm:
+                url, block = bm
+                return ("url", url, "bm", block)
             continue
 
         if c == "next" and page_idx < len(pages) - 1:
@@ -475,7 +511,7 @@ def search_and_select(query):
         if c.isdigit():
             i = int(c)
             if 1 <= i <= len(current_page):
-                return ("url", current_page[i-1][1], "search")
+                return ("url", current_page[i-1][1], "search", 0)
 
         input(f"{C_ERR}Invalid.{C_RESET} Enter…")
 
@@ -491,8 +527,8 @@ def bookmark_manager():
             input("\nEnter…")
             return None
 
-        for i, u in enumerate(b, 1):
-            print(f"{i}. {u}")
+        for i, (u, block) in enumerate(b, 1):
+            print(f"{i}. {u}  {C_DIM}[block {block}]{C_RESET}")
 
         print(f"\n{C_CMD}number=open  d#=delete  q=back{C_RESET}")
 
@@ -561,7 +597,7 @@ def show_image_in_terminal(url):
     max_width = max(20, cols - 2)
     return render_image_halfblocks(img, max_width)
 
-def show_page(url, origin):
+def show_page(url, origin, start_block=0):
     try:
         html = fetch(url)
     except Exception as e:
@@ -574,7 +610,7 @@ def show_page(url, origin):
     link_pages = list(paginate(links, 5))
 
     mode = "text"
-    page = 0
+    page = start_block if 0 <= start_block < len(text_pages) else 0
 
     while True:
         clear_screen()
@@ -616,13 +652,13 @@ def show_page(url, origin):
                 return "back_bm"
             return "home"
         if c == "m":
-            save_bookmark(url)
+            save_bookmark(url, page)
             input("Saved. Enter…")
             continue
         if c == "bm":
             bm = bookmark_manager()
             if bm:
-                return bm  # open bookmark URL, origin handled by main
+                return bm  # (url, block)
             continue
 
         if mode == "text":
@@ -675,6 +711,7 @@ def main():
     current_url = None
     origin = "direct"
     last_search_query = None
+    start_block = 0
 
     while True:
         if mode == "home":
@@ -687,6 +724,7 @@ def main():
             if action[0] == "open_url":
                 current_url = action[1]
                 origin = action[2]
+                start_block = 0
                 mode = "page"
                 continue
             if action[0] == "search":
@@ -704,27 +742,29 @@ def main():
             if res[0] == "url":
                 current_url = res[1]
                 origin = res[2]
+                start_block = res[3] if len(res) > 3 else 0
                 mode = "page"
                 continue
 
         elif mode == "bookmarks":
-            url = bookmark_manager()
-            if url is None:
+            bm = bookmark_manager()
+            if bm is None:
                 mode = "home"
                 continue
-            current_url = url
+            current_url, start_block = bm
             origin = "bm"
             mode = "page"
             continue
 
         elif mode == "page":
-            nav = show_page(current_url, origin)
+            nav = show_page(current_url, origin, start_block)
             if nav == "quit":
                 break
             if nav == "home":
                 mode = "home"
                 current_url = None
                 origin = "direct"
+                start_block = 0
                 continue
             if nav == "back_search":
                 if last_search_query is None:
@@ -735,10 +775,16 @@ def main():
             if nav == "back_bm":
                 mode = "bookmarks"
                 continue
+            if isinstance(nav, tuple):
+                # came from bm inside page
+                current_url, start_block = nav
+                origin = "bm"
+                mode = "page"
+                continue
             if isinstance(nav, str):
-                # navigate to new URL, keep same origin unless it's from bm
+                # navigate to new URL, reset block
                 current_url = nav
-                # if we came from bm via bm command inside page, origin stays as before
+                start_block = 0
                 continue
 
 if __name__ == "__main__":
