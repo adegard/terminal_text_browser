@@ -11,6 +11,10 @@ from urllib.parse import (
 )
 from PIL import Image
 from io import BytesIO
+import sys
+import termios
+import tty
+
 
 # ========= BASIC CONFIG =========
 SAFE_MODE = True
@@ -77,25 +81,25 @@ COLOR_THEME = _cfg.get("COLOR_THEME", "default")
 
 
 # ========= COLORS =========
-
 def apply_color_theme():
-    global C_RESET, C_TITLE, C_LINK, C_CMD, C_ERR, C_DIM
+    global C_RESET, C_TITLE, C_LINK, C_CMD, C_ERR, C_DIM, C_TEXT
 
     if COLOR_THEME == "night":
         C_RESET = "\033[0m"
-        C_TITLE = "\033[38;5;250m"   # soft grey
-        C_LINK = "\033[38;5;180m"    # muted yellow
-        C_CMD  = "\033[38;5;65m"     # dark green
-        C_ERR  = "\033[38;5;131m"    # soft red
-        C_DIM  = "\033[38;5;240m"    # darker grey
+        C_TITLE = "\033[38;5;250m"
+        C_LINK  = "\033[38;5;180m"
+        C_CMD   = "\033[38;5;65m"
+        C_ERR   = "\033[38;5;131m"
+        C_DIM   = "\033[38;5;240m"
+        C_TEXT  = "\033[38;5;245m"   # <— grey paragraph text
     else:
-        # original bright theme
         C_RESET = "\033[0m"
         C_TITLE = "\033[96m"
-        C_LINK = "\033[93m"
-        C_CMD = "\033[92m"
-        C_ERR = "\033[91m"
-        C_DIM = "\033[90m"
+        C_LINK  = "\033[93m"
+        C_CMD   = "\033[92m"
+        C_ERR   = "\033[91m"
+        C_DIM   = "\033[90m"
+        C_TEXT  = "\033[0m"         # default terminal text
 
 
 apply_color_theme()
@@ -176,7 +180,18 @@ def delete_bookmark(i):
             for url, block in b:
                 f.write(f"{url}|||{block}\n")
 
+def read_key():
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        ch = sys.stdin.read(1)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+    return ch
+
 # ========= URL HELPERS =========
+
 def normalize_url(t):
     t = t.strip()
     if t.startswith("http://") or t.startswith("https://"):
@@ -720,9 +735,10 @@ def show_page(url, origin, start_block=0):
             # -------------------------------------------
 
             for line in text_pages[page]:
-                print(line)
+                print(f"{C_TEXT}{line}{C_RESET}")
 
-            print(f"\n{C_DIM}Block {page+1}/{len(text_pages)} ...press [ENTER] next{C_RESET}")
+
+            print(f"\n{C_DIM}Block {page+1}/{len(text_pages)} ...press [SPACE] next{C_RESET}")
             print(f"{C_CMD}p=prev  l=links  i=image  b=back  m=bookmark  bm=saved  h=home  q=quit{C_RESET}")
         else:
             if link_pages and 0 <= page < len(link_pages):
@@ -734,15 +750,24 @@ def show_page(url, origin, start_block=0):
             else:
                 print("[No links]\n")
 
-            print(f"{C_CMD}[ENTER]=next  p=prev  number=open  t=text  b=back  h=home  q=quit{C_RESET}")
+            print(f"{C_CMD}[SPACE]=next  p=prev  number=open  t=text  b=back  h=home  q=quit{C_RESET}")
 
         short_url = shorten_middle(url, cols - 6)
         print(f"{C_TITLE}{short_url}{C_RESET}")
-        raw = input("> ")
-        c = raw.strip().lower()
+        print("> ", end="", flush=True)
+        key = read_key()
 
-        if raw == "":
-            c = "next"
+        if key == " ":
+            c = "next"     # SPACE = next block
+        elif key == "\n":
+            c = "next"     # ENTER = next block
+        else:
+            # fallback to normal input for multi‑char commands
+            # show the key pressed so user sees it
+            print(key, end="", flush=True)
+            rest = input()
+            raw = key + rest
+            c = raw.strip().lower()
 
         if c == "q":
             return "quit"
