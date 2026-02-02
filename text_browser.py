@@ -145,40 +145,64 @@ def load_bookmarks():
             if not line:
                 continue
 
-            if "|||" in line:
-                url, block = line.split("|||", 1)
+            parts = line.split("|||")
+
+            if len(parts) == 3:
+                # NEW FORMAT: title|||url|||block
+                title, url, block = parts
                 try:
                     block = int(block)
-                except Exception:
+                except:
                     block = 0
-                bookmarks.append((url, block))
+                bookmarks.append((title if title else None, url, block))
+
+            elif len(parts) == 2:
+                # OLD FORMAT: url|||block
+                url, block = parts
+                try:
+                    block = int(block)
+                except:
+                    block = 0
+                bookmarks.append((None, url, block))
+
+            elif len(parts) == 1:
+                # VERY OLD FORMAT: url only
+                url = parts[0]
+                bookmarks.append((None, url, 0))
+
             else:
-                bookmarks.append((line, 0))
+                # Corrupted line — skip safely
+                continue
 
     return bookmarks
-
-def save_bookmark(url, block_index):
+    
+def save_bookmark(url, block_index, title=None):
     bookmarks = load_bookmarks()
     updated = False
-    for i, (u, b) in enumerate(bookmarks):
+
+    for i, (t, u, b) in enumerate(bookmarks):
         if u == url:
-            bookmarks[i] = (url, block_index)
+            bookmarks[i] = (title if title else t, url, block_index)
             updated = True
             break
+
     if not updated:
-        bookmarks.append((url, block_index))
+        bookmarks.append((title, url, block_index))
 
     with open(BOOKMARK_FILE, "w") as f:
-        for u, b in bookmarks:
-            f.write(f"{u}|||{b}\n")
+        for t, u, b in bookmarks:
+            safe_title = t if t else ""
+            f.write(f"{safe_title}|||{u}|||{b}\n")
 
 def delete_bookmark(i):
     b = load_bookmarks()
     if 0 <= i < len(b):
         del b[i]
         with open(BOOKMARK_FILE, "w") as f:
-            for url, block in b:
-                f.write(f"{url}|||{block}\n")
+            for title, url, block in b:
+                safe_title = title if title else ""
+                f.write(f"{safe_title}|||{url}|||{block}\n")
+
 
 def read_key():
     fd = sys.stdin.fileno()
@@ -246,6 +270,12 @@ def fetch_main_image_url(soup, base_url):
 
     return None
 
+def extract_title(soup):
+    if soup.title and soup.title.string:
+        return clean_paragraph(soup.title.string)
+    return None
+
+
 def extract_single_page(html, base):
     soup = BeautifulSoup(html, "html.parser")
 
@@ -278,7 +308,8 @@ def extract_single_page(html, base):
                 links.append((label if label else href, href))
 
         main_image = fetch_main_image_url(soup, base)
-        return paragraphs, links, main_image
+        title = extract_title(soup)
+        return paragraphs, links, main_image, title
 
     candidates = []
     for tag in soup.find_all(["article", "main", "div"]):
@@ -302,7 +333,9 @@ def extract_single_page(html, base):
             links.append((label if label else href, href))
 
     main_image = fetch_main_image_url(soup, base)
-    return paragraphs, links, main_image
+    title = extract_title(soup)
+    return paragraphs, links, main_image, title
+
 
 def chunk_paragraphs(paragraphs, n):
     for i in range(0, len(paragraphs), n):
@@ -603,8 +636,13 @@ def bookmark_manager():
             input("\nEnter…")
             return None
 
-        for i, (u, block) in enumerate(b, 1):
-            print(f"{i}. {u}  {C_DIM}[block {block}]{C_RESET}")
+        for i, (title, url, block) in enumerate(b, 1):
+            label = title if title else url
+            cols = shutil.get_terminal_size().columns
+            short_url = shorten_middle(url, max(20, cols - len(label) - 20))
+
+            print(f"{i}. {label}")
+            print(f"   {C_DIM}{short_url}  [block {block}]{C_RESET}")
 
         print(f"\n{C_CMD}number=open  d#=delete  q=back{C_RESET}")
 
@@ -618,7 +656,9 @@ def bookmark_manager():
         if c.isdigit():
             i = int(c) - 1
             if 0 <= i < len(b):
-                return b[i]
+                title, url, block = b[i]
+                return (title, url, block)
+
 
 # ========= PAGE VIEW =========
 def build_text_pages(paragraphs):
@@ -691,7 +731,8 @@ def try_load_next_part(url, paragraphs):
     except Exception:
         return None, url  # no next page
 
-    new_pars, _, _ = extract_single_page(html, next_url)
+    new_pars, _, _, _ = extract_single_page(html, next_url)
+
     if not new_pars:
         return None, url  # no content
 
@@ -703,7 +744,13 @@ def try_load_next_part(url, paragraphs):
         return None, url  # no new content
 
     paragraphs.extend(added)
-    return paragraphs, next_url
+
+    # Re-extract full metadata from the updated page
+    # (title may change on Wattpad page 2, 3, etc.)
+    _, links, main_image, title = extract_single_page(html, next_url)
+
+    return paragraphs, links, main_image, title, next_url
+
 
 
 def show_page(url, origin, start_block=0):
@@ -714,7 +761,7 @@ def show_page(url, origin, start_block=0):
         input("Enter…")
         return "home"
 
-    paragraphs, links, main_image = extract_single_page(html, url)
+    paragraphs, links, main_image, page_title = extract_single_page(html, url)
     text_pages = build_text_pages(paragraphs)
     link_pages = list(paginate(links, 5))
 
@@ -752,8 +799,8 @@ def show_page(url, origin, start_block=0):
 
             print(f"{C_CMD}[SPACE]=next  p=prev  number=open  t=text  b=back  h=home  q=quit{C_RESET}")
 
-        short_url = shorten_middle(url, cols - 6)
-        print(f"{C_TITLE}{short_url}{C_RESET}")
+        title_to_show = page_title if page_title else shorten_middle(url, cols - 6)
+        print(f"{C_TEXT}{title_to_show}{C_RESET}")
         print("> ", end="", flush=True)
         key = read_key()
 
@@ -780,7 +827,7 @@ def show_page(url, origin, start_block=0):
                 return "back_bm"
             return "home"
         if c == "m":
-            save_bookmark(url, page)
+            save_bookmark(url, page, page_title)
             input("Saved. Enter…")
             continue
         if c == "bm":
@@ -802,8 +849,9 @@ def show_page(url, origin, start_block=0):
                 #new_pars, next_part_loaded = try_load_next_part(url, paragraphs, next_part_loaded)
                 result = try_load_next_part(url, paragraphs)
                 if result:
-                    paragraphs, url = result
+                    paragraphs, links, main_image, page_title, url = result
                     text_pages = build_text_pages(paragraphs)
+                    link_pages = list(paginate(links, 5))
                     continue
 
                 if new_pars is not None:
@@ -906,7 +954,7 @@ def main():
             if bm is None:
                 mode = "home"
                 continue
-            current_url, start_block = bm
+            current_title, current_url, start_block = bm
             origin = "bm"
             mode = "page"
             continue
@@ -931,7 +979,7 @@ def main():
                 mode = "bookmarks"
                 continue
             if isinstance(nav, tuple):
-                current_url, start_block = nav
+                current_title, current_url, start_block = nav
                 origin = "bm"
                 mode = "page"
                 continue
