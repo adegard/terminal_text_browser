@@ -49,7 +49,7 @@ Text Web browser in terminal (also termux) in python. Perfect for small screen d
 - Cleans paragraphs and wraps them to terminal width
 - Pagination by paragraph blocks
 - Commands:
-  - `ENTER` — next block
+  - `SPACE` — next block
   - `p` — previous block
   - `l` — switch to link mode
   - `b` — go back on search results
