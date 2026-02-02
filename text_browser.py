@@ -33,8 +33,10 @@ CONFIG_FILE = os.path.expanduser("~/.tbrowser_config.json")
 DEFAULT_CONFIG = {
     "PARAS_PER_PAGE": 2,
     "DEFAULT_ENGINE": "duck_lite",
-    "SEARCH_RESULTS_PER_PAGE": 10
+    "SEARCH_RESULTS_PER_PAGE": 10,
+    "COLOR_THEME": "default"
 }
+
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
@@ -56,8 +58,10 @@ def save_config():
     cfg = {
         "PARAS_PER_PAGE": PARAS_PER_PAGE,
         "DEFAULT_ENGINE": DEFAULT_ENGINE,
-        "SEARCH_RESULTS_PER_PAGE": SEARCH_RESULTS_PER_PAGE
+        "SEARCH_RESULTS_PER_PAGE": SEARCH_RESULTS_PER_PAGE,
+        "COLOR_THEME": COLOR_THEME
     }
+
     try:
         with open(CONFIG_FILE, "w") as f:
             json.dump(cfg, f, indent=2)
@@ -69,14 +73,33 @@ _cfg = load_config()
 PARAS_PER_PAGE = _cfg["PARAS_PER_PAGE"]
 DEFAULT_ENGINE = _cfg["DEFAULT_ENGINE"]
 SEARCH_RESULTS_PER_PAGE = _cfg["SEARCH_RESULTS_PER_PAGE"]
+COLOR_THEME = _cfg.get("COLOR_THEME", "default")
+
 
 # ========= COLORS =========
-C_RESET = "\033[0m"
-C_TITLE = "\033[96m"
-C_LINK = "\033[93m"
-C_CMD = "\033[92m"
-C_ERR = "\033[91m"
-C_DIM = "\033[90m"
+
+def apply_color_theme():
+    global C_RESET, C_TITLE, C_LINK, C_CMD, C_ERR, C_DIM
+
+    if COLOR_THEME == "night":
+        C_RESET = "\033[0m"
+        C_TITLE = "\033[38;5;250m"   # soft grey
+        C_LINK = "\033[38;5;180m"    # muted yellow
+        C_CMD  = "\033[38;5;65m"     # dark green
+        C_ERR  = "\033[38;5;131m"    # soft red
+        C_DIM  = "\033[38;5;240m"    # darker grey
+    else:
+        # original bright theme
+        C_RESET = "\033[0m"
+        C_TITLE = "\033[96m"
+        C_LINK = "\033[93m"
+        C_CMD = "\033[92m"
+        C_ERR = "\033[91m"
+        C_DIM = "\033[90m"
+
+
+apply_color_theme()
+
 
 # ========= HTTP SESSION =========
 session = requests.Session()
@@ -395,7 +418,7 @@ def print_search_results_page(results_page, page_idx, total_pages):
 
 # ========= SETTINGS MENU =========
 def settings_menu():
-    global PARAS_PER_PAGE, DEFAULT_ENGINE, SEARCH_RESULTS_PER_PAGE
+    global PARAS_PER_PAGE, DEFAULT_ENGINE, SEARCH_RESULTS_PER_PAGE, COLOR_THEME
 
     while True:
         clear_screen()
@@ -403,6 +426,7 @@ def settings_menu():
         print(f"1. Paragraphs per page: {PARAS_PER_PAGE}")
         print(f"2. Search engine: {SEARCH_ENGINES[DEFAULT_ENGINE]}")
         print(f"3. Search results per page: {SEARCH_RESULTS_PER_PAGE}")
+        print(f"4. Color theme: {COLOR_THEME}")
         print("\nq = back\n")
 
         c = input("> ").strip().lower()
@@ -441,6 +465,26 @@ def settings_menu():
                 SEARCH_RESULTS_PER_PAGE = int(val)
                 save_config()
             continue
+        if c == "4":
+            clear_screen()
+            print(f"{C_TITLE}=== COLOR THEMES ==={C_RESET}\n")
+            print("1. default (bright)")
+            print("2. night (dim grey, dark green)")
+            print("\nq = back\n")
+
+            s = input("> ").strip().lower()
+            if s == "q":
+                continue
+            if s == "1":
+                COLOR_THEME = "default"
+                apply_color_theme()
+                save_config()
+            if s == "2":
+                COLOR_THEME = "night"
+                apply_color_theme()
+                save_config()
+            continue
+
 
 # ========= HOME =========
 def home():
