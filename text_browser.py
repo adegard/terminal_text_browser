@@ -729,26 +729,25 @@ def try_load_next_part(url, paragraphs):
     try:
         html = fetch(next_url)
     except Exception:
-        return None, url  # no next page
+        return None  # no next page
 
-    new_pars, _, _, _ = extract_single_page(html, next_url)
+    # extract full metadata (4 values)
+    new_pars, links, main_image, title = extract_single_page(html, next_url)
 
     if not new_pars:
-        return None, url  # no content
+        return None  # no content
 
     # Deduplicate
     existing = set(paragraphs)
     added = [p for p in new_pars if p not in existing]
 
     if not added:
-        return None, url  # no new content
+        return None  # no new content
 
+    # Append new paragraphs
     paragraphs.extend(added)
 
-    # Re-extract full metadata from the updated page
-    # (title may change on Wattpad page 2, 3, etc.)
-    _, links, main_image, title = extract_single_page(html, next_url)
-
+    # ALWAYS return 5 values
     return paragraphs, links, main_image, title, next_url
 
 
@@ -845,8 +844,8 @@ def show_page(url, origin, start_block=0):
                 if page < len(text_pages) - 1:
                     page += 1
                     continue
+
                 # At last block: try to discover next part
-                #new_pars, next_part_loaded = try_load_next_part(url, paragraphs, next_part_loaded)
                 result = try_load_next_part(url, paragraphs)
                 if result:
                     paragraphs, links, main_image, page_title, url = result
@@ -854,24 +853,10 @@ def show_page(url, origin, start_block=0):
                     link_pages = list(paginate(links, 5))
                     continue
 
-                if new_pars is not None:
-                    paragraphs = new_pars
-                    text_pages = build_text_pages(paragraphs)
-
-                    # Fix: ensure page index is valid after rebuild
-                    if page >= len(text_pages):
-                        page = len(text_pages) - 1
-                    if page < 0:
-                        page = 0
-
-                    # Move forward if possible
-                    if page < len(text_pages) - 1:
-                        page += 1
-                    continue
-
                 # No more content
                 input(f"{C_DIM}End of content.{C_RESET} Enter…")
                 continue
+
             if c == "p" and page > 0:
                 page -= 1
                 continue
