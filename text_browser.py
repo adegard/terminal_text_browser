@@ -38,7 +38,8 @@ DEFAULT_CONFIG = {
     "PARAS_PER_PAGE": 2,
     "DEFAULT_ENGINE": "duck_lite",
     "SEARCH_RESULTS_PER_PAGE": 10,
-    "COLOR_THEME": "default"
+    "COLOR_THEME": "default",
+    "MAX_CHARS_PER_BLOCK": 2000   
 }
 
 
@@ -63,7 +64,8 @@ def save_config():
         "PARAS_PER_PAGE": PARAS_PER_PAGE,
         "DEFAULT_ENGINE": DEFAULT_ENGINE,
         "SEARCH_RESULTS_PER_PAGE": SEARCH_RESULTS_PER_PAGE,
-        "COLOR_THEME": COLOR_THEME
+        "COLOR_THEME": COLOR_THEME,
+        "MAX_CHARS_PER_BLOCK": MAX_CHARS_PER_BLOCK
     }
 
     try:
@@ -78,6 +80,8 @@ PARAS_PER_PAGE = _cfg["PARAS_PER_PAGE"]
 DEFAULT_ENGINE = _cfg["DEFAULT_ENGINE"]
 SEARCH_RESULTS_PER_PAGE = _cfg["SEARCH_RESULTS_PER_PAGE"]
 COLOR_THEME = _cfg.get("COLOR_THEME", "default")
+MAX_CHARS_PER_BLOCK = _cfg.get("MAX_CHARS_PER_BLOCK", 2000)
+
 
 
 # ========= COLORS =========
@@ -466,7 +470,7 @@ def print_search_results_page(results_page, page_idx, total_pages):
 
 # ========= SETTINGS MENU =========
 def settings_menu():
-    global PARAS_PER_PAGE, DEFAULT_ENGINE, SEARCH_RESULTS_PER_PAGE, COLOR_THEME
+    global PARAS_PER_PAGE, DEFAULT_ENGINE, SEARCH_RESULTS_PER_PAGE, COLOR_THEME, MAX_CHARS_PER_BLOCK
 
     while True:
         clear_screen()
@@ -475,6 +479,7 @@ def settings_menu():
         print(f"2. Search engine: {SEARCH_ENGINES[DEFAULT_ENGINE]}")
         print(f"3. Search results per page: {SEARCH_RESULTS_PER_PAGE}")
         print(f"4. Color theme: {COLOR_THEME}")
+        print(f"5. Max characters per block: {MAX_CHARS_PER_BLOCK}")
         print("\nq = back\n")
 
         c = input("> ").strip().lower()
@@ -530,6 +535,12 @@ def settings_menu():
             if s == "2":
                 COLOR_THEME = "night"
                 apply_color_theme()
+                save_config()
+            continue
+        if c == "5":
+            val = input("Max characters per block (200–5000): ").strip()
+            if val.isdigit() and 200 <= int(val) <= 5000:
+                MAX_CHARS_PER_BLOCK = int(val)
                 save_config()
             continue
 
@@ -665,8 +676,19 @@ def build_text_pages(paragraphs):
     if not paragraphs:
         return [["[No readable text]"]]
 
+    # --- NEW: split paragraphs exceeding MAX_CHARS_PER_BLOCK ---
+    processed = []
+    for para in paragraphs:
+        if len(para) <= MAX_CHARS_PER_BLOCK:
+            processed.append(para)
+        else:
+            # split into chunks
+            for i in range(0, len(para), MAX_CHARS_PER_BLOCK):
+                processed.append(para[i:i+MAX_CHARS_PER_BLOCK])
+
+    # Now paginate normally
     pages = []
-    for block in chunk_paragraphs(paragraphs, PARAS_PER_PAGE):
+    for block in chunk_paragraphs(processed, PARAS_PER_PAGE):
         lines = []
         cols = shutil.get_terminal_size().columns
         usable_width = max(10, cols)
@@ -676,7 +698,9 @@ def build_text_pages(paragraphs):
             lines.extend(wrapped)
             lines.append("")
         pages.append(lines)
+
     return pages
+
 
 def render_image_halfblocks(img, max_width):
     img = img.convert("RGB")
