@@ -806,10 +806,7 @@ def show_page(url, origin, start_block=0):
 
             for line in text_pages[page]:
                 print(f"{C_TEXT}{line}{C_RESET}")
-
-
-            print(f"\n{C_DIM}Block {page+1}/{len(text_pages)} ...press [SPACE] next{C_RESET}")
-            print(f"{C_CMD}p=prev  l=links  i=image  b=back  m=bookmark  bm=saved  h=home  q=quit{C_RESET}")
+            print(f"{C_DIM}Block {page+1}/{len(text_pages)}{C_RESET} {C_CMD}space= next  p=prev  l=links  i=image  b=back  m=bookmark  bm=saved  h=home  q=quit{C_RESET}")
         else:
             if link_pages and 0 <= page < len(link_pages):
                 for i, (label, link) in enumerate(link_pages[page], 1):
