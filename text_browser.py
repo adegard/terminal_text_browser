@@ -207,16 +207,33 @@ def delete_bookmark(i):
                 safe_title = title if title else ""
                 f.write(f"{safe_title}|||{url}|||{block}\n")
 
-
 def read_key():
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
     try:
         tty.setraw(fd)
         ch = sys.stdin.read(1)
+
+        # Arrow keys start with ESC
+        if ch == "\x1b":
+            seq = sys.stdin.read(2)  # read the next two chars
+            if seq == "[A":
+                return "UP"
+            if seq == "[B":
+                return "DOWN"
+            if seq == "[C":
+                return "RIGHT"
+            if seq == "[D":
+                return "LEFT"
+            return ch  # unknown escape sequence
+
+        # Backspace normalization
+        if ch == "\x7f":
+            return "BACKSPACE"
+
+        return ch
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
-    return ch
 
 # ========= URL HELPERS =========
 
@@ -806,7 +823,7 @@ def show_page(url, origin, start_block=0):
 
             for line in text_pages[page]:
                 print(f"{C_TEXT}{line}{C_RESET}")
-            print(f"{C_DIM}Block {page+1}/{len(text_pages)}{C_RESET} {C_CMD}space= next  p=prev  l=links  i=image  b=back  m=bookmark  bm=saved  h=home  q=quit{C_RESET}")
+            print(f"{C_DIM}Block {page+1}/{len(text_pages)}{C_RESET} {C_CMD}Space/↓=next  p/↑=prev  l=links  i=image  b=back  m=save  bm=bookmarks  h=home  q=quit{C_RESET}")
         else:
             if link_pages and 0 <= page < len(link_pages):
                 for i, (label, link) in enumerate(link_pages[page], 1):
@@ -824,13 +841,27 @@ def show_page(url, origin, start_block=0):
         print("> ", end="", flush=True)
         key = read_key()
 
-        if key == " ":
-            c = "next"     # SPACE = next block
+        # Arrow keys
+        if key == "DOWN":
+            c = "next"
+        elif key == "UP":
+            c = "p"
+
+        # Space / Enter
+        elif key == " ":
+            c = "next"
         elif key == "\n":
-            c = "next"     # ENTER = next block
+            c = "next"
+
+        # Backspace while typing a command
+        elif key == "BACKSPACE":
+            # Let user edit normally
+            print("\b \b", end="", flush=True)
+            rest = input()
+            c = rest.strip().lower()
+
+        # Normal typed commands
         else:
-            # fallback to normal input for multi‑char commands
-            # show the key pressed so user sees it
             print(key, end="", flush=True)
             rest = input()
             raw = key + rest
