@@ -25,6 +25,7 @@ Text Web browser in terminal (also termux) in python. Perfect for small screen d
   - Search queries (sent to DuckDuckGo Lite, check other provider in settings)
 - Commands:
   - `bm` — open bookmark manager
+  - `ai your_question` — ask ai (put groq api key in settings first) 
   - `q` — quit the application
   - `s` — settings
 ---
