@@ -23,6 +23,7 @@ Text Web browser in terminal (also termux) in python. Perfect for small screen d
   - Direct URLs (`https://example.com`)
   - Domain shortcuts (`example.com`)
   - Search queries (sent to DuckDuckGo Lite, check other provider in settings)
+  - Ask AI in terminal
 - Commands:
   - `bm` — open bookmark manager
   - `ai your_question` — ask ai (put groq api key in settings first) 
