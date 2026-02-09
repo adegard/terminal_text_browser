@@ -38,6 +38,7 @@ DEFAULT_CONFIG = {
     "PARAS_PER_PAGE": 2,
     "DEFAULT_ENGINE": "duck_lite",
     "SEARCH_RESULTS_PER_PAGE": 10,
+    "groq_api_key": "",
     "COLOR_THEME": "default",
     "MAX_CHARS_PER_BLOCK": 2000   
 }
@@ -64,6 +65,7 @@ def save_config():
         "PARAS_PER_PAGE": PARAS_PER_PAGE,
         "DEFAULT_ENGINE": DEFAULT_ENGINE,
         "SEARCH_RESULTS_PER_PAGE": SEARCH_RESULTS_PER_PAGE,
+        "groq_api_key": GROQ_API_KEY,
         "COLOR_THEME": COLOR_THEME,
         "MAX_CHARS_PER_BLOCK": MAX_CHARS_PER_BLOCK
     }
@@ -81,6 +83,7 @@ DEFAULT_ENGINE = _cfg["DEFAULT_ENGINE"]
 SEARCH_RESULTS_PER_PAGE = _cfg["SEARCH_RESULTS_PER_PAGE"]
 COLOR_THEME = _cfg.get("COLOR_THEME", "default")
 MAX_CHARS_PER_BLOCK = _cfg.get("MAX_CHARS_PER_BLOCK", 2000)
+GROQ_API_KEY = _cfg.get("groq_api_key", "")
 
 
 
@@ -114,6 +117,49 @@ session = requests.Session()
 session.headers.update({"User-Agent": "Mozilla/5.0"})
 
 # ========= CLEANING + WRAPPING =========
+
+def show_text(text):
+    # Normalize AI output into a clean string
+    if isinstance(text, list):
+        text = "\n\n".join(str(x) for x in text)
+    else:
+        text = str(text)
+
+    text = text.strip()
+
+    # Split into paragraphs
+    paragraphs = text.split("\n\n")
+
+    # Build pages (each paragraph is a block)
+    pages = []
+    for para in paragraphs:
+        lines = para.split("\n")
+        pages.append(lines)
+
+    # --- SIMPLE TEXT PAGER ---
+    page = 0
+    while True:
+        clear_screen()
+        for line in pages[page]:
+            print(line)
+        print(f"\nPage {page+1}/{len(pages)}")
+        print("[ENTER]=next  p=prev  q=quit")
+
+        cmd = input("> ").strip().lower()
+
+        if cmd == "q":
+            return
+        if cmd == "p" and page > 0:
+            page -= 1
+            continue
+        if cmd == "" and page < len(pages) - 1:
+            page += 1
+            continue
+        if cmd == "":
+            return
+
+
+
 def clean_paragraph(text):
     text = text.replace("\n", " ")
     text = re.sub(r"\s+", " ", text)
@@ -367,6 +413,47 @@ def paginate(items, n=20):
         yield items[i:i+n]
 
 # ========= SEARCH IMPLEMENTATIONS =========
+def flatten_ai_output(content):
+    # Recursively flatten nested lists until we get a string
+    while isinstance(content, list) and len(content) == 1:
+        content = content[0]
+
+    # If it's still a list, join all elements
+    if isinstance(content, list):
+        return "\n\n".join(str(x) for x in content)
+
+    # If it's not a string, convert it
+    return str(content)
+
+
+def ai_query(prompt):
+    if not GROQ_API_KEY:
+        return "AI ERROR:\nNo Groq API key set. Go to Settings → Set Groq API key."
+
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
+    data = {
+        "model": "llama-3.1-8b-instant",
+        "messages": [
+            {"role": "user", "content": prompt}
+        ]
+    }
+
+    try:
+        r = session.post(url, headers=headers, json=data, timeout=20)
+        r.raise_for_status()
+        j = r.json()
+        content = j["choices"][0]["message"]["content"]
+
+        # --- FIX: flatten ANY nested structure ---
+        content = flatten_ai_output(content)
+
+        return content.strip()
+
+    except Exception as e:
+        return f"AI ERROR:\n{e}"
+
+
 def search_duck(q):
     r = session.get(DUCK_LITE + "?q=" + q, timeout=15)
     r.raise_for_status()
@@ -450,7 +537,7 @@ def search_bing_text(q):
 
 def search(q):
     if DEFAULT_ENGINE == "duck_lite":
-        return search_duck(q)
+        return search_duck(q)     
     if DEFAULT_ENGINE == "duck_html":
         return search_duck_html(q)
     if DEFAULT_ENGINE == "brave":
@@ -487,7 +574,7 @@ def print_search_results_page(results_page, page_idx, total_pages):
 
 # ========= SETTINGS MENU =========
 def settings_menu():
-    global PARAS_PER_PAGE, DEFAULT_ENGINE, SEARCH_RESULTS_PER_PAGE, COLOR_THEME, MAX_CHARS_PER_BLOCK
+    global PARAS_PER_PAGE, DEFAULT_ENGINE, SEARCH_RESULTS_PER_PAGE, COLOR_THEME, MAX_CHARS_PER_BLOCK, GROQ_API_KEY
 
     while True:
         clear_screen()
@@ -496,7 +583,8 @@ def settings_menu():
         print(f"2. Search engine: {SEARCH_ENGINES[DEFAULT_ENGINE]}")
         print(f"3. Search results per page: {SEARCH_RESULTS_PER_PAGE}")
         print(f"4. Color theme: {COLOR_THEME}")
-        print(f"5. Max characters per block: {MAX_CHARS_PER_BLOCK}")
+        print(f"5. Set Groq API key (please allow model llama-3.1-8b-instant) (current: {'SET' if GROQ_API_KEY else 'NOT SET'})")
+        print(f"6. Max characters per block: {MAX_CHARS_PER_BLOCK}")
         print("\nq = back\n")
 
         c = input("> ").strip().lower()
@@ -535,26 +623,32 @@ def settings_menu():
                 SEARCH_RESULTS_PER_PAGE = int(val)
                 save_config()
             continue
-        if c == "4":
-            clear_screen()
-            print(f"{C_TITLE}=== COLOR THEMES ==={C_RESET}\n")
-            print("1. default (bright)")
-            print("2. night (dim grey, dark green)")
-            print("\nq = back\n")
 
-            s = input("> ").strip().lower()
-            if s == "q":
-                continue
+        if c == "4":
+            print("\n1. default")
+            print("2. night")
+            s = input("> ").strip()
             if s == "1":
                 COLOR_THEME = "default"
                 apply_color_theme()
                 save_config()
-            if s == "2":
+            elif s == "2":
                 COLOR_THEME = "night"
                 apply_color_theme()
                 save_config()
             continue
+
         if c == "5":
+            print("\nEnter your Groq API key:")
+            key = input("> ").strip()
+            if key:
+                GROQ_API_KEY = key
+                save_config()
+                print("Groq API key saved.")
+                input("Enter…")
+            continue
+
+        if c == "6":
             val = input("Max characters per block (200–5000): ").strip()
             if val.isdigit() and 200 <= int(val) <= 5000:
                 MAX_CHARS_PER_BLOCK = int(val)
@@ -580,13 +674,29 @@ def home():
              '-.....-'
         """)
         print(f"\n{C_TITLE}=== TEXT BROWSER V.0 ==={C_RESET}")
-        print(f"{C_DIM}(Search / Url / bm=bookmarks / s=settings / q=quit){C_RESET}")
+        print(f"{C_DIM}(Search / Url / bm=bookmarks / s=settings / ai + text=ask AI / q=quit){C_RESET}")
 
         t = input("> ").strip()
         if not t:
             continue
 
         low = t.lower()
+
+        # AI mode: ai <question>
+        if t.startswith("ai "):
+            question = t[3:].strip()
+            if not question:
+                print("Write: ai your question")
+                continue
+
+            if not GROQ_API_KEY:
+                print("\nNo Groq API key found.")
+                print("Go to Settings → Set Groq API key.")
+                continue
+            print(f"\n{C_TITLE}=== AI ANSWER ==={C_RESET}\n")
+            answer = ai_query(question)
+            show_text(answer)
+            continue
 
         if low == "q":
             return ("quit",)
@@ -633,8 +743,9 @@ def search_and_select(query):
         if c == "bm":
             bm = bookmark_manager()
             if bm:
-                url, block = bm
+                title, url, block = bm
                 return ("url", url, "bm", block)
+
             continue
 
         if c == "next" and page_idx < len(pages) - 1:
