@@ -26,6 +26,7 @@ Text Web browser in terminal (also termux) in python. Perfect for small screen d
   - Ask AI in terminal
 - Commands:
   - `bm` — open bookmark manager
+  - `c` — open chronology
   - `ai your_question` — ask ai (put groq api key in settings first) 
   - `q` — quit the application
   - `s` — settings
@@ -55,6 +56,7 @@ Text Web browser in terminal (also termux) in python. Perfect for small screen d
   - `p/↑` — previous block
   - `l` — switch to link mode
   - `b` — go back on search results
+  - `bc` — go back in chronology (last visited page)
   - `m` — save current page and block as bookmark
   - `bm` — open bookmark manager
   - `h` — home
