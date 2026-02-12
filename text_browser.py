@@ -40,6 +40,7 @@ DEFAULT_CONFIG = {
     "SEARCH_RESULTS_PER_PAGE": 10,
     "groq_api_key": "",
     "COLOR_THEME": "default",
+    "CHRONOLOGY_LENGTH": 5,
     "MAX_CHARS_PER_BLOCK": 2000   
 }
 
@@ -67,6 +68,7 @@ def save_config():
         "SEARCH_RESULTS_PER_PAGE": SEARCH_RESULTS_PER_PAGE,
         "groq_api_key": GROQ_API_KEY,
         "COLOR_THEME": COLOR_THEME,
+        "CHRONOLOGY_LENGTH": CHRONOLOGY_LENGTH,
         "MAX_CHARS_PER_BLOCK": MAX_CHARS_PER_BLOCK
     }
 
@@ -84,6 +86,7 @@ SEARCH_RESULTS_PER_PAGE = _cfg["SEARCH_RESULTS_PER_PAGE"]
 COLOR_THEME = _cfg.get("COLOR_THEME", "default")
 MAX_CHARS_PER_BLOCK = _cfg.get("MAX_CHARS_PER_BLOCK", 2000)
 GROQ_API_KEY = _cfg.get("groq_api_key", "")
+CHRONOLOGY_LENGTH = _cfg.get("CHRONOLOGY_LENGTH", 5)
 
 
 
@@ -184,6 +187,51 @@ def wrap(text, width):
     return lines
 
 # ========= BOOKMARKS =========
+HISTORY_FILE = os.path.expanduser("~/.tbrowser_history")
+
+def load_history():
+    # Create empty file if missing
+    if not os.path.exists(HISTORY_FILE):
+        os.makedirs(os.path.dirname(HISTORY_FILE), exist_ok=True)
+        with open(HISTORY_FILE, "w") as f:
+            pass
+        return []
+
+    items = []
+    with open(HISTORY_FILE) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split("|||")
+            if len(parts) == 2:
+                title, url = parts
+                items.append((title, url))
+    return items
+
+
+def save_history(items):
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(HISTORY_FILE), exist_ok=True)
+
+    # Create file if missing and write cleanly
+    with open(HISTORY_FILE, "w") as f:
+        for title, url in items:
+            safe_title = title if title else ""
+            f.write(f"{safe_title}|||{url}\n")
+
+
+def add_history(title, url):
+    hist = load_history()
+    # remove duplicates
+    hist = [(t, u) for (t, u) in hist if u != url]
+    # prepend newest
+    hist.insert(0, (title if title else "", url))
+    # trim
+    hist = hist[:CHRONOLOGY_LENGTH]
+    save_history(hist)
+
+
 def load_bookmarks():
     if not os.path.exists(BOOKMARK_FILE):
         return []
@@ -575,7 +623,8 @@ def print_search_results_page(results_page, page_idx, total_pages):
 # ========= SETTINGS MENU =========
 def settings_menu():
     global PARAS_PER_PAGE, DEFAULT_ENGINE, SEARCH_RESULTS_PER_PAGE, COLOR_THEME, MAX_CHARS_PER_BLOCK, GROQ_API_KEY
-
+    global CHRONOLOGY_LENGTH
+    
     while True:
         clear_screen()
         print(f"{C_TITLE}=== SETTINGS ==={C_RESET}\n")
@@ -584,7 +633,8 @@ def settings_menu():
         print(f"3. Search results per page: {SEARCH_RESULTS_PER_PAGE}")
         print(f"4. Color theme: {COLOR_THEME}")
         print(f"5. Set Groq API key (please allow model llama-3.1-8b-instant) (current: {'SET' if GROQ_API_KEY else 'NOT SET'})")
-        print(f"6. Max characters per block: {MAX_CHARS_PER_BLOCK}")
+        print(f"6. Chronology length: {CHRONOLOGY_LENGTH}")
+        print(f"7. Max characters per block: {MAX_CHARS_PER_BLOCK}")
         print("\nq = back\n")
 
         c = input("> ").strip().lower()
@@ -647,8 +697,14 @@ def settings_menu():
                 print("Groq API key saved.")
                 input("Enter…")
             continue
+        if c == "6": 
+            val = input("Chronology length (1–200): ").strip() 
+            if val.isdigit() and 1 <= int(val) <= 200: 
+                CHRONOLOGY_LENGTH = int(val) 
+                save_config() 
+            continue
 
-        if c == "6":
+        if c == "7":
             val = input("Max characters per block (200–5000): ").strip()
             if val.isdigit() and 200 <= int(val) <= 5000:
                 MAX_CHARS_PER_BLOCK = int(val)
@@ -674,7 +730,7 @@ def home():
              '-.....-'
         """)
         print(f"\n{C_TITLE}=== TEXT BROWSER V.0 ==={C_RESET}")
-        print(f"{C_DIM}(Search / Url / bm=bookmarks / s=settings / ai + text=ask AI / q=quit){C_RESET}")
+        print(f"{C_DIM}(Search / Url / bm=bookmarks / c=chronology / s=settings / ai + text=ask AI / q=quit){C_RESET}")
 
         t = input("> ").strip()
         if not t:
@@ -707,6 +763,9 @@ def home():
         if low == "s":
             settings_menu()
             continue
+
+        if low == "c":
+            return ("chronology",)
 
         url = normalize_url(t)
         if url:
@@ -745,9 +804,15 @@ def search_and_select(query):
             if bm:
                 title, url, block = bm
                 return ("url", url, "bm", block)
-
             continue
 
+        if c == "c": 
+            cm = chronology_manager() 
+            if cm: 
+                _, title, url = cm 
+                return ("url", url, "chronology", 0) 
+            continue
+        
         if c == "next" and page_idx < len(pages) - 1:
             page_idx += 1
             continue
@@ -762,6 +827,54 @@ def search_and_select(query):
                 return ("url", current_page[i-1][1], "search", 0)
 
         input(f"{C_ERR}Invalid.{C_RESET} Enter…")
+
+def handle_nav(nav):
+    while True:
+        if nav is None:
+            return None
+
+        kind = nav[0]
+
+        # QUIT
+        if kind == "quit":
+            return ("quit",)
+
+        # HOME
+        if kind == "home":
+            return ("home",)
+
+        # BACK
+        if kind == "back":
+            origin = nav[1]
+            if origin == "search":
+                return ("search_again",)
+            if origin == "bm":
+                return ("open_bookmarks",)
+            if origin == "chronology":
+                return ("open_chronology",)
+            return ("home",)
+
+        # OPEN BOOKMARK
+        if kind == "open_bm":
+            _, title, url, block = nav
+            nav = show_page(url, "bm", block)
+            continue
+
+        # OPEN CHRONOLOGY
+        if kind == "open_chronology":
+            _, title, url = nav
+            nav = show_page(url, "chronology", 0)
+            continue
+
+        # OPEN URL
+        if kind == "open_url":
+            _, url, origin, block = nav
+            nav = show_page(url, origin, block)
+            continue
+
+        # Unknown → home
+        return ("home",)
+
 
 # ========= BOOKMARK MANAGER =========
 def bookmark_manager():
@@ -798,7 +911,38 @@ def bookmark_manager():
                 title, url, block = b[i]
                 return (title, url, block)
 
+def chronology_manager():
+    while True:
+        clear_screen()
+        h = load_history()
+        print(f"{C_TITLE}=== CHRONOLOGY ==={C_RESET}\n")
 
+        if not h:
+            print("No history.")
+            input("\nEnter…")
+            return None
+
+        for i, (title, url) in enumerate(h, 1):
+            label = title if title else url
+            cols = shutil.get_terminal_size().columns
+            short_url = shorten_middle(url, max(20, cols - len(label) - 20))
+            print(f"{i}. {label}")
+            print(f"   {C_DIM}{short_url}{C_RESET}")
+
+        print(f"\n{C_CMD}number=open  q=back{C_RESET}")
+
+        c = input("> ").strip().lower()
+
+        if c == "q":
+            return None
+
+        if c.isdigit():
+            i = int(c) - 1
+            if 0 <= i < len(h):
+                title, url = h[i]
+                return ("chronology", title, url)
+
+        
 # ========= PAGE VIEW =========
 def build_text_pages(paragraphs):
     if not paragraphs:
@@ -902,39 +1046,45 @@ def try_load_next_part(url, paragraphs):
     # ALWAYS return 5 values
     return paragraphs, links, main_image, title, next_url
 
-
-
 def show_page(url, origin, start_block=0):
     try:
         html = fetch(url)
     except Exception as e:
         print(f"{C_ERR}{e}{C_RESET}")
         input("Enter…")
-        return "home"
+        return ("home",)
 
     paragraphs, links, main_image, page_title = extract_single_page(html, url)
     text_pages = build_text_pages(paragraphs)
     link_pages = list(paginate(links, 5))
 
+    # record visit
+    add_history(page_title if page_title else url, url)
+
     mode = "text"
     page = start_block if 0 <= start_block < len(text_pages) else 0
-    next_part_loaded = False
 
     while True:
         clear_screen()
         cols = shutil.get_terminal_size().columns
 
+        # ---------------- TEXT MODE ----------------
         if mode == "text":
-            # --- FIX: clamp page index to avoid crash ---
             if page >= len(text_pages):
                 page = len(text_pages) - 1
             if page < 0:
                 page = 0
-            # -------------------------------------------
 
             for line in text_pages[page]:
                 print(f"{C_TEXT}{line}{C_RESET}")
-            print(f"{C_DIM}Block {page+1}/{len(text_pages)}{C_RESET} {C_CMD}Space/↓=next  p/↑=prev  l=links  i=image  b=back  m=save  bm=bookmarks  h=home  q=quit{C_RESET}")
+
+            print(
+                f"{C_DIM}Block {page+1}/{len(text_pages)}{C_RESET} "
+                f"{C_CMD}Space/↓=next  p/↑=prev  l=links  i=image  "
+                f"b=back  bc=chronology-back  m=save  bm=bookmarks  h=home  q=quit{C_RESET}"
+            )
+
+        # ---------------- LINKS MODE ----------------
         else:
             if link_pages and 0 <= page < len(link_pages):
                 for i, (label, link) in enumerate(link_pages[page], 1):
@@ -945,49 +1095,63 @@ def show_page(url, origin, start_block=0):
             else:
                 print("[No links]\n")
 
-            print(f"{C_CMD}[SPACE]=next  p=prev  number=open  t=text  b=back  h=home  q=quit{C_RESET}")
+            print(
+                f"{C_CMD}[SPACE]=next  p=prev  number=open  "
+                f"t=text  b=back  h=home  q=quit{C_RESET}"
+            )
 
+        # ---------------- TITLE ----------------
         title_to_show = page_title if page_title else shorten_middle(url, cols - 6)
         print(f"{C_TEXT}{title_to_show}{C_RESET}")
         print("> ", end="", flush=True)
+
+        # ---------------- INPUT ----------------
         key = read_key()
 
-        # Arrow keys
         if key == "DOWN":
             c = "next"
         elif key == "UP":
             c = "p"
-
-        # Space / Enter
         elif key == " ":
             c = "next"
         elif key == "\n":
             c = "next"
-
-        # Backspace while typing a command
         elif key == "BACKSPACE":
-            # Let user edit normally
             print("\b \b", end="", flush=True)
             rest = input()
             c = rest.strip().lower()
-
-        # Normal typed commands
         else:
             print(key, end="", flush=True)
             rest = input()
-            raw = key + rest
-            c = raw.strip().lower()
+            c = (key + rest).strip().lower()
 
+        # ---------------- GLOBAL COMMANDS ----------------
         if c == "q":
-            return "quit"
+            return ("quit",)
+
         if c == "h":
-            return "home"
+            return ("home",)
+
         if c == "b":
             if origin == "search":
-                return "back_search"
+                return ("back", origin)
+
             if origin == "bm":
-                return "back_bm"
-            return "home"
+                return ("back", origin)
+
+            if origin == "chronology":
+                return ("back", origin)
+
+            return ("home",)
+
+        if c == "bc":
+            hist = load_history()
+            if len(hist) < 2:
+                input("No previous page in chronology. Enter…")
+                continue
+            prev_title, prev_url = hist[1]
+            return ("open_url", prev_url, "chronology", 0)
+
         if c == "m":
             save_bookmark(url, page, page_title)
             input("Saved. Enter…")
@@ -995,20 +1159,24 @@ def show_page(url, origin, start_block=0):
         if c == "bm":
             bm = bookmark_manager()
             if bm:
-                return bm
+                title, bm_url, bm_block = bm
+                return ("open_bm", title, bm_url, bm_block)
             continue
 
+
+        # ---------------- TEXT MODE LOGIC ----------------
         if mode == "text":
             if c == "l":
                 mode = "links"
                 page = 0
                 continue
+
             if c == "next":
                 if page < len(text_pages) - 1:
                     page += 1
                     continue
 
-                # At last block: try to discover next part
+                # try next part
                 result = try_load_next_part(url, paragraphs)
                 if result:
                     paragraphs, links, main_image, page_title, url = result
@@ -1016,13 +1184,13 @@ def show_page(url, origin, start_block=0):
                     link_pages = list(paginate(links, 5))
                     continue
 
-                # No more content
                 input(f"{C_DIM}End of content.{C_RESET} Enter…")
                 continue
 
             if c == "p" and page > 0:
                 page -= 1
                 continue
+
             if c == "i":
                 if not main_image:
                     input(f"{C_ERR}No image found.{C_RESET} Enter…")
@@ -1030,29 +1198,34 @@ def show_page(url, origin, start_block=0):
 
                 clear_screen()
                 print(f"{C_TITLE}=== ARTICLE IMAGE ==={C_RESET}\n")
-
                 img_lines = show_image_in_terminal(main_image)
                 for line in img_lines:
                     print(line)
-
                 print(f"\n{C_CMD}Enter=back{C_RESET}")
                 input()
                 continue
+
+        # ---------------- LINKS MODE LOGIC ----------------
         else:
             if c == "t":
                 mode = "text"
                 page = 0
                 continue
+
             if c == "next" and page < len(link_pages) - 1:
                 page += 1
                 continue
+
             if c == "p" and page > 0:
                 page -= 1
                 continue
+
+            # FIXED: return proper tuple for main loop
             if c.isdigit() and link_pages:
                 i = int(c) - 1
                 if 0 <= page < len(link_pages) and 0 <= i < len(link_pages[page]):
-                    return link_pages[page][i][1]
+                    link = link_pages[page][i][1]
+                    return ("open_url", link, "page", 0)
 
         input(f"{C_ERR}Invalid.{C_RESET} Enter…")
 
@@ -1065,31 +1238,56 @@ def main():
     start_block = 0
 
     while True:
+
+        # ---------------- HOME MODE ----------------
         if mode == "home":
             action = home()
+
             if action[0] == "quit":
                 break
+
             if action[0] == "bookmarks":
                 mode = "bookmarks"
                 continue
+
+            if action[0] == "chronology":
+                cm = chronology_manager()
+                if cm:
+                    _, title, url = cm
+                    nav = show_page(url, "chronology", 0)
+
+                    # chain open_url
+                    while isinstance(nav, tuple) and nav[0] == "open_url":
+                        _, url2, origin2, block2 = nav
+                        nav = show_page(url2, origin2, block2)
+
+                    if nav == ("quit",):
+                        break
+                continue
+
             if action[0] == "open_url":
                 current_url = action[1]
                 origin = action[2]
                 start_block = 0
                 mode = "page"
                 continue
+
             if action[0] == "search":
                 last_search_query = action[1]
                 mode = "search"
                 continue
 
+        # ---------------- SEARCH MODE ----------------
         elif mode == "search":
             res = search_and_select(last_search_query)
+
             if res is None:
                 mode = "home"
                 continue
+
             if res[0] == "quit":
                 break
+
             if res[0] == "url":
                 current_url = res[1]
                 origin = res[2]
@@ -1097,40 +1295,69 @@ def main():
                 mode = "page"
                 continue
 
+        # ---------------- BOOKMARKS MODE ----------------
         elif mode == "bookmarks":
             bm = bookmark_manager()
+
             if bm is None:
                 mode = "home"
                 continue
-            current_title, current_url, start_block = bm
+
+            title, current_url, start_block = bm
             origin = "bm"
             mode = "page"
             continue
 
+        # ---------------- PAGE MODE ----------------
         elif mode == "page":
             nav = show_page(current_url, origin, start_block)
-            if nav == "quit":
+
+            # ---- unified navigation handling ----
+            while isinstance(nav, tuple) and nav[0] == "open_url":
+                _, url, origin, block = nav
+                nav = show_page(url, origin, block)
+
+            # QUIT
+            if nav == ("quit",) or nav == "quit":
                 break
-            if nav == "home":
+
+            # HOME
+            if nav == ("home",) or nav == "home":
                 mode = "home"
                 current_url = None
                 origin = "direct"
                 start_block = 0
                 continue
-            if nav == "back_search":
-                if last_search_query is None:
-                    mode = "home"
-                else:
+
+            # BACK
+            if isinstance(nav, tuple) and nav[0] == "back":
+                back_origin = nav[1]
+                if back_origin == "search":
                     mode = "search"
+                elif back_origin == "bm":
+                    mode = "bookmarks"
+                elif back_origin == "chronology":
+                    mode = "chronology"
+                else:
+                    mode = "home"
                 continue
-            if nav == "back_bm":
-                mode = "bookmarks"
-                continue
-            if isinstance(nav, tuple):
-                current_title, current_url, start_block = nav
+
+            # OPEN BOOKMARK
+            if isinstance(nav, tuple) and nav[0] == "open_bm":
+                _, title, current_url, start_block = nav
                 origin = "bm"
                 mode = "page"
                 continue
+
+            # OPEN CHRONOLOGY
+            if isinstance(nav, tuple) and nav[0] == "open_chronology":
+                _, title, current_url = nav
+                origin = "chronology"
+                start_block = 0
+                mode = "page"
+                continue
+
+            # STRING URL (fallback)
             if isinstance(nav, str):
                 current_url = nav
                 start_block = 0
