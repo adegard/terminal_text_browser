@@ -1078,6 +1078,24 @@ def try_load_next_part(url, paragraphs):
     # ALWAYS return 5 values
     return paragraphs, links, main_image, title, next_url
 
+def progress_bar(current, total, width=20):
+    """
+    Render a simple terminal progress bar.
+    Example: [██████░░░░░░░░] 42%
+    """
+    if total <= 0:
+        return "----------"
+
+    ratio = current / total
+    filled = int(ratio * width)
+    empty = width - filled
+
+    bar = "█" * filled + "░" * empty
+    percent = int(ratio * 100)
+
+    #return f"[{bar}] {percent}%"
+    return f"{bar}"
+
 def show_page(url, origin, start_block=0):
     try:
         html = fetch(url)
@@ -1110,8 +1128,13 @@ def show_page(url, origin, start_block=0):
             for line in text_pages[page]:
                 print(f"{C_TEXT}{line}{C_RESET}")
 
+            # >>> NEW: progress bar instead of block count
+            pb = progress_bar(page + 1, len(text_pages))
+            
+
             print(
-                f"{C_DIM}Block {page+1}/{len(text_pages)}{C_RESET} "
+                #f"{C_DIM}Block {page+1}/{len(text_pages)}{C_RESET} "
+                f"{C_DIM}{pb}{C_RESET} "
                 f"{C_CMD}Space/↓=next  p/↑=prev  l=links  i=image  "
                 f"b=back  bc=chronology-back  m=save  bm=bookmarks  h=home  q=quit{C_RESET}"
             )
