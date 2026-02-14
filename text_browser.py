@@ -891,9 +891,24 @@ def handle_nav(nav):
 
         # Unknown → home
         return ("home",)
+        
+# ========= BOOKMARK CHECKER =========
 
+
+def is_bookmarked(url):
+    for title, u, block in load_bookmarks():
+        if u == url:
+            return True
+    return False
+
+def get_bookmark_block(url):
+    for title, u, block in load_bookmarks():
+        if u == url:
+            return block
+    return None
 
 # ========= BOOKMARK MANAGER =========
+
 def bookmark_manager():
     while True:
         clear_screen()
@@ -1118,8 +1133,14 @@ def show_page(url, origin, start_block=0):
             )
 
         # ---------------- TITLE ----------------
+        # Bookmark indicator
+        if is_bookmarked(url):
+            bm_flag = "  [\033[92mSAVED\033[0m]"       # green
+        else:
+            bm_flag = "  [\033[91mNOT SAVED\033[0m]"   # red
+        
         title_to_show = page_title if page_title else shorten_middle(url, cols - 6)
-        print(f"{C_TEXT}{title_to_show}{C_RESET}")
+        print(f"{C_TEXT}{title_to_show}{C_RESET}{bm_flag}")
         print("> ", end="", flush=True)
 
         # ---------------- INPUT ----------------
@@ -1191,6 +1212,12 @@ def show_page(url, origin, start_block=0):
             if c == "next":
                 if page < len(text_pages) - 1:
                     page += 1
+                    
+                    # >>> ADDED: Auto‑update bookmark 
+                    if is_bookmarked(url): 
+                        save_bookmark(url, page, page_title) 
+					# <<< END ADDED
+                    
                     continue
 
                 # try next part
