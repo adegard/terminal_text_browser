@@ -94,14 +94,26 @@ CHRONOLOGY_LENGTH = _cfg.get("CHRONOLOGY_LENGTH", 5)
 def apply_color_theme():
     global C_RESET, C_TITLE, C_LINK, C_CMD, C_ERR, C_DIM, C_TEXT
 
-    if COLOR_THEME == "night":
+    theme = COLOR_THEME
+
+    # --- Automatic mode ---
+    if theme == "automatic":
+        from datetime import datetime
+        hour = datetime.now().hour
+        # Night from 18:00 to 06:00
+        if hour >= 20 or hour < 6:
+            theme = "night"
+        else:
+            theme = "default"
+
+    if theme == "night":
         C_RESET = "\033[0m"
         C_TITLE = "\033[38;5;250m"
         C_LINK  = "\033[38;5;180m"
         C_CMD   = "\033[38;5;65m"
         C_ERR   = "\033[38;5;131m"
         C_DIM   = "\033[38;5;240m"
-        C_TEXT  = "\033[38;5;245m"   # <— grey paragraph text
+        C_TEXT  = "\033[38;5;245m"
     else:
         C_RESET = "\033[0m"
         C_TITLE = "\033[96m"
@@ -109,7 +121,7 @@ def apply_color_theme():
         C_CMD   = "\033[92m"
         C_ERR   = "\033[91m"
         C_DIM   = "\033[90m"
-        C_TEXT  = "\033[0m"         # default terminal text
+        C_TEXT  = "\033[0m"
 
 
 apply_color_theme()
@@ -677,15 +689,20 @@ def settings_menu():
         if c == "4":
             print("\n1. default")
             print("2. night")
+            print("3. automatic (8pm-6am)")
             s = input("> ").strip()
             if s == "1":
                 COLOR_THEME = "default"
-                apply_color_theme()
-                save_config()
             elif s == "2":
                 COLOR_THEME = "night"
-                apply_color_theme()
-                save_config()
+            elif s == "3":
+                COLOR_THEME = "automatic"
+            else:
+                continue
+
+            apply_color_theme()
+            save_config()
+
             continue
 
         if c == "5":
