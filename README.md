@@ -1,5 +1,5 @@
 # TERMINAL TEXT BROWSER 
-Text Web browser in terminal (also termux) in python. Perfect for small screen devices and reading like a book online with bookmarking exact page and last paragraph position (called block) 
+Text Web browser in terminal (also termux) in python. Perfect for small screen devices and reading like a book online with bookmarking exact page and last paragraph position (with autosave of progress for bookmarked pages) 
 </br>
 
            _.-''''''-._
