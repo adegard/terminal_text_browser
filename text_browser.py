@@ -43,7 +43,8 @@ DEFAULT_CONFIG = {
     "CHRONOLOGY_LENGTH": 5,
     "MAX_CHARS_PER_BLOCK": 2000,
     "SHOW_READING_MENUS": True,
-    "SHOW_PAGE_TITLE": True
+    "SHOW_PAGE_TITLE": True,
+    "SHOW_PROGESS_BAR": True
 }
 
 
@@ -73,7 +74,8 @@ def save_config():
         "CHRONOLOGY_LENGTH": CHRONOLOGY_LENGTH,
         "MAX_CHARS_PER_BLOCK": MAX_CHARS_PER_BLOCK,
         "SHOW_READING_MENUS": SHOW_READING_MENUS,
-        "SHOW_PAGE_TITLE": SHOW_PAGE_TITLE
+        "SHOW_PAGE_TITLE": SHOW_PAGE_TITLE,
+        "SHOW_PROGESS_BAR": SHOW_PROGESS_BAR
     }
 
     try:
@@ -93,7 +95,7 @@ GROQ_API_KEY = _cfg.get("groq_api_key", "")
 CHRONOLOGY_LENGTH = _cfg.get("CHRONOLOGY_LENGTH", 5)
 SHOW_READING_MENUS = _cfg.get("SHOW_READING_MENUS", True)
 SHOW_PAGE_TITLE = _cfg.get("SHOW_PAGE_TITLE", True)
-
+SHOW_PROGESS_BAR = _cfg.get("SHOW_PROGESS_BAR", True)
 
 # ========= COLORS =========
 def apply_color_theme():
@@ -640,7 +642,7 @@ def print_search_results_page(results_page, page_idx, total_pages):
 # ========= SETTINGS MENU =========
 def settings_menu():
     global PARAS_PER_PAGE, DEFAULT_ENGINE, SEARCH_RESULTS_PER_PAGE, COLOR_THEME, MAX_CHARS_PER_BLOCK, GROQ_API_KEY
-    global CHRONOLOGY_LENGTH, SHOW_READING_MENUS, SHOW_PAGE_TITLE
+    global CHRONOLOGY_LENGTH, SHOW_READING_MENUS, SHOW_PAGE_TITLE, SHOW_PROGESS_BAR
     
     while True:
         clear_screen()
@@ -653,7 +655,8 @@ def settings_menu():
         print(f"6. Chronology length: {CHRONOLOGY_LENGTH}")
         print(f"7. Max characters per block: {MAX_CHARS_PER_BLOCK}")
         print(f"8. Show menus in reading: {SHOW_READING_MENUS}")
-        print(f"9. Show page title in reading: {SHOW_PAGE_TITLE}")
+        print(f"9. Show page title page: {SHOW_PAGE_TITLE}")
+        print(f"10. Show progress bar: {SHOW_PROGESS_BAR}")
         print("\nq = back\n")
 
         c = input("> ").strip().lower()
@@ -742,6 +745,11 @@ def settings_menu():
 
         if c == "9":
             SHOW_PAGE_TITLE = not SHOW_PAGE_TITLE
+            save_config()
+            continue
+
+        if c == "10":
+            SHOW_PROGESS_BAR = not SHOW_PROGESS_BAR
             save_config()
             continue
 
@@ -1144,17 +1152,16 @@ def show_page(url, origin, start_block=0):
             for line in text_pages[page]:
                 print(f"{C_TEXT}{line}{C_RESET}")
 
-            # >>> NEW: progress bar instead of block count
+            # progress bar instead of block count
             pb = progress_bar(page + 1, len(text_pages))
             
-            #print(
-                #f"{C_DIM}Block {page+1}/{len(text_pages)}{C_RESET} " #old block showing numbers
-                # f"{C_DIM}{pb}{C_RESET} " #moved to title_parameter
-                # f"{C_CMD}Space/↓=next  p/↑=prev  l=links  i=image  "
-                # f"b=back  bc=chronology-back  m=save  bm=bookmarks  h=home  q=quit{C_RESET}"
-            #)
+            #f"{C_DIM}Block {page+1}/{len(text_pages)}{C_RESET} " #old block showing numbers
+  
+            # >optional reading menus
                 
-                # >>> NEW: optional reading menus
+            if SHOW_PROGESS_BAR:
+                print(f"{C_DIM}{pb}{C_RESET}")
+                
             if SHOW_READING_MENUS:
                 print(f"{C_CMD}Space/↓=next  p/↑=prev  l=links  i=image  "
                     f"b=back  bc=chronology-back  m=save  bm=bookmarks  h=home  q=quit{C_RESET}"
