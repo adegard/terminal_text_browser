@@ -18,6 +18,12 @@ Text Web browser in terminal (also termux) in python. Perfect for small screen d
 
 # Terminal Text Browser — Features Overview
 
+# installation
+
+pip install -r requirements.txt
+
+python text_browser.py
+
 ## 🏠 Home Screen
 - Accepts:
   - Direct URLs (`https://example.com`)
