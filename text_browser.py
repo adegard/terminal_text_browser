@@ -41,7 +41,9 @@ DEFAULT_CONFIG = {
     "groq_api_key": "",
     "COLOR_THEME": "default",
     "CHRONOLOGY_LENGTH": 5,
-    "MAX_CHARS_PER_BLOCK": 2000   
+    "MAX_CHARS_PER_BLOCK": 2000,
+    "SHOW_READING_MENUS": True,
+    "SHOW_PAGE_TITLE": True
 }
 
 
@@ -69,7 +71,9 @@ def save_config():
         "groq_api_key": GROQ_API_KEY,
         "COLOR_THEME": COLOR_THEME,
         "CHRONOLOGY_LENGTH": CHRONOLOGY_LENGTH,
-        "MAX_CHARS_PER_BLOCK": MAX_CHARS_PER_BLOCK
+        "MAX_CHARS_PER_BLOCK": MAX_CHARS_PER_BLOCK,
+        "SHOW_READING_MENUS": SHOW_READING_MENUS,
+        "SHOW_PAGE_TITLE": SHOW_PAGE_TITLE
     }
 
     try:
@@ -87,7 +91,8 @@ COLOR_THEME = _cfg.get("COLOR_THEME", "default")
 MAX_CHARS_PER_BLOCK = _cfg.get("MAX_CHARS_PER_BLOCK", 2000)
 GROQ_API_KEY = _cfg.get("groq_api_key", "")
 CHRONOLOGY_LENGTH = _cfg.get("CHRONOLOGY_LENGTH", 5)
-
+SHOW_READING_MENUS = _cfg.get("SHOW_READING_MENUS", True)
+SHOW_PAGE_TITLE = _cfg.get("SHOW_PAGE_TITLE", True)
 
 
 # ========= COLORS =========
@@ -635,7 +640,7 @@ def print_search_results_page(results_page, page_idx, total_pages):
 # ========= SETTINGS MENU =========
 def settings_menu():
     global PARAS_PER_PAGE, DEFAULT_ENGINE, SEARCH_RESULTS_PER_PAGE, COLOR_THEME, MAX_CHARS_PER_BLOCK, GROQ_API_KEY
-    global CHRONOLOGY_LENGTH
+    global CHRONOLOGY_LENGTH, SHOW_READING_MENUS, SHOW_PAGE_TITLE
     
     while True:
         clear_screen()
@@ -647,6 +652,8 @@ def settings_menu():
         print(f"5. Set Groq API key (please allow model llama-3.1-8b-instant) (current: {'SET' if GROQ_API_KEY else 'NOT SET'})")
         print(f"6. Chronology length: {CHRONOLOGY_LENGTH}")
         print(f"7. Max characters per block: {MAX_CHARS_PER_BLOCK}")
+        print(f"8. Show menus in reading: {SHOW_READING_MENUS}")
+        print(f"9. Show page title in reading: {SHOW_PAGE_TITLE}")
         print("\nq = back\n")
 
         c = input("> ").strip().lower()
@@ -728,6 +735,15 @@ def settings_menu():
                 save_config()
             continue
 
+        if c == "8":
+            SHOW_READING_MENUS = not SHOW_READING_MENUS
+            save_config()
+            continue
+
+        if c == "9":
+            SHOW_PAGE_TITLE = not SHOW_PAGE_TITLE
+            save_config()
+            continue
 
 # ========= HOME =========
 def home():
@@ -1131,13 +1147,18 @@ def show_page(url, origin, start_block=0):
             # >>> NEW: progress bar instead of block count
             pb = progress_bar(page + 1, len(text_pages))
             
-
-            print(
-                #f"{C_DIM}Block {page+1}/{len(text_pages)}{C_RESET} "
-                f"{C_DIM}{pb}{C_RESET} "
-                f"{C_CMD}Space/↓=next  p/↑=prev  l=links  i=image  "
-                f"b=back  bc=chronology-back  m=save  bm=bookmarks  h=home  q=quit{C_RESET}"
-            )
+            #print(
+                #f"{C_DIM}Block {page+1}/{len(text_pages)}{C_RESET} " #old block showing numbers
+                # f"{C_DIM}{pb}{C_RESET} " #moved to title_parameter
+                # f"{C_CMD}Space/↓=next  p/↑=prev  l=links  i=image  "
+                # f"b=back  bc=chronology-back  m=save  bm=bookmarks  h=home  q=quit{C_RESET}"
+            #)
+                
+                # >>> NEW: optional reading menus
+            if SHOW_READING_MENUS:
+                print(f"{C_CMD}Space/↓=next  p/↑=prev  l=links  i=image  "
+                    f"b=back  bc=chronology-back  m=save  bm=bookmarks  h=home  q=quit{C_RESET}"
+                )
 
         # ---------------- LINKS MODE ----------------
         else:
@@ -1163,7 +1184,11 @@ def show_page(url, origin, start_block=0):
             bm_flag = "  [\033[91mNOT SAVED\033[0m]"   # red
         
         title_to_show = page_title if page_title else shorten_middle(url, cols - 6)
-        print(f"{C_TEXT}{title_to_show}{bm_flag}{C_RESET}")
+        
+        if SHOW_PAGE_TITLE:
+            print(f"{C_TEXT}{title_to_show}{bm_flag}{C_RESET}")
+        else:
+            print(f"{bm_flag}\n")
         print("> ", end="", flush=True)
 
         # ---------------- INPUT ----------------
