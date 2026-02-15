@@ -14,6 +14,7 @@ from io import BytesIO
 import sys
 import termios
 import tty
+import PyPDF2
 
 
 # ========= BASIC CONFIG =========
@@ -348,7 +349,31 @@ def read_key():
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
-# ========= URL HELPERS =========
+# ========= USEFULL HELPERS =========
+def extract_pdf_text(url):
+    try:
+        r = session.get(url, timeout=20)
+        r.raise_for_status()
+    except Exception as e:
+        return [f"[PDF fetch error: {e}]"]
+
+    try:
+        reader = PyPDF2.PdfReader(BytesIO(r.content))
+    except Exception as e:
+        return [f"[PDF parse error: {e}]"]
+
+    paragraphs = []
+    for page in reader.pages:
+        text = page.extract_text() or ""
+        text = clean_paragraph(text)
+        if text.strip():
+            paragraphs.append(text)
+
+    if not paragraphs:
+        return ["[PDF contains no extractable text]"]
+
+    return paragraphs
+
 
 def normalize_url(t):
     t = t.strip()
@@ -1121,14 +1146,26 @@ def progress_bar(current, total, width=20):
     return f"{bar}"
 
 def show_page(url, origin, start_block=0):
+    # >>> FIXED: unified fetch + PDF detection
     try:
-        html = fetch(url)
+        if url.lower().endswith(".pdf"):
+            # PDF mode
+            paragraphs = extract_pdf_text(url)
+            links = []
+            main_image = None
+            page_title = "PDF Document"
+        else:
+            # Normal HTML mode
+            html = fetch(url)
+            paragraphs, links, main_image, page_title = extract_single_page(html, url)
+
     except Exception as e:
         print(f"{C_ERR}{e}{C_RESET}")
         input("Enter…")
         return ("home",)
+    # <<< END FIX
 
-    paragraphs, links, main_image, page_title = extract_single_page(html, url)
+    # paragraphs, links, main_image, page_title = extract_single_page(html, url)
     text_pages = build_text_pages(paragraphs)
     link_pages = list(paginate(links, 5))
 
