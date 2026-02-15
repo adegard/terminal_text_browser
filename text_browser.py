@@ -1163,7 +1163,7 @@ def show_page(url, origin, start_block=0):
             bm_flag = "  [\033[91mNOT SAVED\033[0m]"   # red
         
         title_to_show = page_title if page_title else shorten_middle(url, cols - 6)
-        print(f"{C_TEXT}{title_to_show}{C_RESET}{bm_flag}")
+        print(f"{C_TEXT}{title_to_show}{bm_flag}{C_RESET}")
         print("> ", end="", flush=True)
 
         # ---------------- INPUT ----------------
