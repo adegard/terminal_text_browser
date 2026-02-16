@@ -361,6 +361,9 @@ def extract_pdf_text(url):
         reader = PyPDF2.PdfReader(BytesIO(r.content))
     except Exception as e:
         return [f"[PDF parse error: {e}]"]
+        
+    # Extract title 
+    pdf_title = extract_pdf_title(reader)
 
     paragraphs = []
     for page in reader.pages:
@@ -372,7 +375,22 @@ def extract_pdf_text(url):
     if not paragraphs:
         return ["[PDF contains no extractable text]"]
 
-    return paragraphs
+    return paragraphs, pdf_title
+
+def extract_pdf_title(reader):
+    """
+    Extract the PDF title from metadata if available.
+    Falls back to None if missing or unreadable.
+    """
+    try:
+        info = reader.metadata
+        if info and info.title:
+            title = str(info.title).strip()
+            if title:
+                return title
+    except Exception:
+        pass
+    return None
 
 
 def normalize_url(t):
@@ -1150,10 +1168,10 @@ def show_page(url, origin, start_block=0):
     try:
         if url.lower().endswith(".pdf"):
             # PDF mode
-            paragraphs = extract_pdf_text(url)
+            paragraphs, pdf_title = extract_pdf_text(url)
             links = []
             main_image = None
-            page_title = "PDF Document"
+            page_title = pdf_title if pdf_title else "PDF Document"
         else:
             # Normal HTML mode
             html = fetch(url)
