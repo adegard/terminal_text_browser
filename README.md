@@ -58,6 +58,9 @@ Text Web browser in terminal (also termux) in python. Perfect for small screen d
   - `b` — go back on search results
   - `bc` — go back in chronology (last visited page)
   - `m` — save current page and block as bookmark
+  - `s` — share (showing full url to be copied)
+  - `ai + text` — ask something to ai
+  - `ai` — ask ai to comment the current block of text
   - `bm` — open bookmark manager
   - `h` — home
   - `q` — quit
