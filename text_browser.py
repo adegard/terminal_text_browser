@@ -1207,7 +1207,7 @@ def show_page(url, origin, start_block=0):
                 
             if SHOW_READING_MENUS:
                 print(f"{C_CMD}Space/↓=next  p/↑=prev  l=links  i=image  "
-                    f"b=back  bc=chronology-back  m=save  bm=bookmarks  h=home  q=quit{C_RESET}"
+                    f"b=back  bc=chronology-back  m=save  s=share bm=bookmarks  h=home  q=quit{C_RESET}"
                 )
 
         # ---------------- LINKS MODE ----------------
@@ -1297,6 +1297,14 @@ def show_page(url, origin, start_block=0):
             if bm:
                 title, bm_url, bm_block = bm
                 return ("open_bm", title, bm_url, bm_block)
+            continue
+        # --- SHARE SHORTCUT: 's' ---
+        if c == "s":
+            clear_screen()
+            print(f"{C_TITLE}=== SHARE LINK ==={C_RESET}\n")
+            print(url)
+            print(f"\n{C_DIM}Press ENTER to return to block {page+1}{C_RESET}")
+            input()
             continue
 
 
