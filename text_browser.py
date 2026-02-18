@@ -140,45 +140,33 @@ session = requests.Session()
 session.headers.update({"User-Agent": "Mozilla/5.0"})
 
 # ========= CLEANING + WRAPPING =========
+def show_ai_answer(answer):
+    # Normalize
+    if isinstance(answer, list):
+        answer = "\n\n".join(str(x) for x in answer)
+    answer = answer.strip()
 
-def show_text(text):
-    # Normalize AI output into a clean string
-    if isinstance(text, list):
-        text = "\n\n".join(str(x) for x in text)
-    else:
-        text = str(text)
-
-    text = text.strip()
-
-    # Split into paragraphs
-    paragraphs = text.split("\n\n")
-
-    # Build pages (each paragraph is a block)
-    pages = []
-    for para in paragraphs:
-        lines = para.split("\n")
-        pages.append(lines)
-
-    # --- SIMPLE TEXT PAGER ---
+    paragraphs = answer.split("\n\n")
     page = 0
+
     while True:
         clear_screen()
-        for line in pages[page]:
-            print(line)
-        print(f"\nPage {page+1}/{len(pages)}")
-        print("[ENTER]=next  p=prev  q=quit")
+        print(f"{C_TITLE}=== AI ANSWER ==={C_RESET}\n")
+        print(paragraphs[page])
+        print(f"\n{C_DIM}Paragraph {page+1}/{len(paragraphs)}{C_RESET}")
+        print(f"{C_CMD}↑/p=prev  ↓/ENTER=next  q=quit{C_RESET}")
 
-        cmd = input("> ").strip().lower()
+        key = read_key()
 
-        if cmd == "q":
+        if key in ("q", "Q"):
             return
-        if cmd == "p" and page > 0:
+        if key in ("UP", "p") and page > 0:
             page -= 1
             continue
-        if cmd == "" and page < len(pages) - 1:
-            page += 1
-            continue
-        if cmd == "":
+        if key in ("DOWN", "\n", " "):
+            if page < len(paragraphs) - 1:
+                page += 1
+                continue
             return
 
 
@@ -835,7 +823,7 @@ def home():
                 continue
             print(f"\n{C_TITLE}=== AI ANSWER ==={C_RESET}\n")
             answer = ai_query(question)
-            show_text(answer)
+            show_ai_answer(answer)
             continue
 
         if low == "q":
@@ -1241,10 +1229,10 @@ def show_page(url, origin, start_block=0):
         # ---------------- TITLE ----------------
         # Bookmark indicator
         if is_bookmarked(url):
-            bm_flag = "  [\033[92mSAVED\033[0m]"       # green
+            bm_flag = "  [\033[38;5;34m✔ SAVED\033[0m]"       # darker green
         else:
-            bm_flag = "  [\033[91mNOT SAVED\033[0m]"   # red
-        
+            bm_flag = "  [\033[38;5;124m✘ TO SAVE: m+Enter\033[0m]"  # darker red
+
         title_to_show = page_title if page_title else shorten_middle(url, cols - 6)
         
         if SHOW_PAGE_TITLE:
@@ -1356,6 +1344,29 @@ def show_page(url, origin, start_block=0):
                 for line in img_lines:
                     print(line)
                 print(f"\n{C_CMD}Enter=back{C_RESET}")
+                input()
+                continue
+
+            # --- AI inside reading mode ---
+            if c.startswith("ai"):
+                # Extract question
+                q = c[2:].strip()
+
+                # If no question, use current block text
+                if not q:
+                    block_text = "\n".join(text_pages[page])
+                    q = f"Explain this briefly:\n{block_text}"
+
+                # Call AI
+                answer = ai_query(q)
+
+                # Reduce to 1 paragraph
+                answer = clean_paragraph(answer)
+
+                clear_screen()
+                print(f"{C_TITLE}=== AI ANSWER ==={C_RESET}\n")
+                print(answer)
+                print(f"\n{C_DIM}Press ENTER to return to block {page+1}{C_RESET}")
                 input()
                 continue
 
