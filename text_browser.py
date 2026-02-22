@@ -930,13 +930,16 @@ def search_and_select(query):
 
         if raw == "":
             c = "next"
-# ADDED TO TEST:
+            
+# ADDED for extra keys:            
+        if c == "+":
+            c = "n"
+        if c == "-":
+            c = "p" 
         if c == "n":   # PAGE DOWN keycode
             c = "next"
-
         if c == "\x10":   # PAGE UP keycode
             c = "p"
-
         if c == "KEYCODE_PAGE_DOWN":
             c = "next"
 ############
