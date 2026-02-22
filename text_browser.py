@@ -477,7 +477,7 @@ def is_ad_or_tracker(url):
 
 # ========= FETCH & PARSE =========
 def fetch(url):
-    r = session.get(url, timeout=15)
+    r = session.get(url, timeout=15, allow_redirects=True)
     r.raise_for_status()
     return r.text
 
