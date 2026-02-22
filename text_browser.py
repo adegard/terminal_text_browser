@@ -15,6 +15,7 @@ import sys
 import termios
 import tty
 import PyPDF2
+import time
 
 
 # ========= BASIC CONFIG =========
@@ -45,7 +46,9 @@ DEFAULT_CONFIG = {
     "MAX_CHARS_PER_BLOCK": 2000,
     "SHOW_READING_MENUS": True,
     "SHOW_PAGE_TITLE": True,
-    "SHOW_PROGESS_BAR": True
+    "SHOW_PROGESS_BAR": True,
+    "ADAPTIVE_WPM_PDF": 120,
+    "ADAPTIVE_WPM_HTML": 120
 }
 
 
@@ -76,7 +79,9 @@ def save_config():
         "MAX_CHARS_PER_BLOCK": MAX_CHARS_PER_BLOCK,
         "SHOW_READING_MENUS": SHOW_READING_MENUS,
         "SHOW_PAGE_TITLE": SHOW_PAGE_TITLE,
-        "SHOW_PROGESS_BAR": SHOW_PROGESS_BAR
+        "SHOW_PROGESS_BAR": SHOW_PROGESS_BAR,
+        "ADAPTIVE_WPM_PDF": ADAPTIVE_WPM_PDF,
+        "ADAPTIVE_WPM_HTML": ADAPTIVE_WPM_HTML
     }
 
     try:
@@ -97,6 +102,10 @@ CHRONOLOGY_LENGTH = _cfg.get("CHRONOLOGY_LENGTH", 5)
 SHOW_READING_MENUS = _cfg.get("SHOW_READING_MENUS", True)
 SHOW_PAGE_TITLE = _cfg.get("SHOW_PAGE_TITLE", True)
 SHOW_PROGESS_BAR = _cfg.get("SHOW_PROGESS_BAR", True)
+ADAPTIVE_WPM_PDF = _cfg.get("ADAPTIVE_WPM_PDF", 120)
+ADAPTIVE_WPM_HTML = _cfg.get("ADAPTIVE_WPM_HTML", 120)
+
+
 
 # ========= COLORS =========
 def apply_color_theme():
@@ -338,6 +347,46 @@ def read_key():
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 # ========= USEFULL HELPERS =========
+
+def update_adaptive_wpm(current_wpm, words, seconds):
+    if seconds <= 0:
+        return current_wpm
+
+    measured = (words / seconds) * 60
+    alpha = 0.2  # smoothing factor
+
+    return (1 - alpha) * current_wpm + alpha * measured
+
+
+def estimate_reading_time(paragraphs, current_block, wpm=None):
+    if wpm is None:
+        wpm = ADAPTIVE_WPM
+
+    total_blocks = len(paragraphs)
+
+    # If we are on the LAST block → remaining time is zero
+    if current_block >= total_blocks - 1:
+        return "0 sec"
+
+    # Otherwise count remaining blocks normally
+    remaining_text = " ".join(paragraphs[current_block+1:])
+    words = len(remaining_text.split())
+    minutes = words / wpm
+
+    if words == 0:
+        return "0 sec"
+
+    if minutes < 1:
+        seconds = int(minutes * 60)
+        return f"{seconds} sec"
+
+    if minutes > 60:
+        hours = minutes / 60
+        return f"{hours:.1f} hours"
+
+    return f"{minutes:.1f} min"
+
+
 def extract_pdf_text(url):
     try:
         r = session.get(url, timeout=20)
@@ -687,7 +736,7 @@ def settings_menu():
         print(f"7. Max characters per block: {MAX_CHARS_PER_BLOCK}")
         print(f"8. Show menus in reading: {SHOW_READING_MENUS}")
         print(f"9. Show page title page: {SHOW_PAGE_TITLE}")
-        print(f"10. Show progress bar: {SHOW_PROGESS_BAR}")
+        print(f"10. Show progress/remaining: {SHOW_PROGESS_BAR}")
         print("\nq = back\n")
 
         c = input("> ").strip().lower()
@@ -802,13 +851,30 @@ def home():
              '-.....-'
         """)
         print(f"\n{C_TITLE}=== TEXT BROWSER V.0 ==={C_RESET}")
-        print(f"{C_DIM}(Search / Url / bm=bookmarks / c=chronology / s=settings / ai + text=ask AI / q=quit){C_RESET}")
+        print(f"{C_DIM}(Search text / ifl + text=I'm feeling lucky / Url / bm=bookmarks / c=chronology / s=settings / ai + text=ask AI / q=quit){C_RESET}")
 
         t = input("> ").strip()
         if not t:
             continue
 
         low = t.lower()
+
+        # Instant First Link search: ifl <query>
+        if low.startswith("ifl "):
+            q = t[4:].strip()
+            if not q:
+                print("Usage: ifl <search terms>")
+                continue
+
+            results = search(q)
+            if not results:
+                print(f"{C_ERR}No results.{C_RESET}")
+                input("Enter…")
+                continue
+
+            # Open the first result immediately
+            title, url = results[0]
+            return ("open_url", url, "search", 0)
 
         # AI mode: ai <question>
         if t.startswith("ai "):
@@ -1152,6 +1218,9 @@ def progress_bar(current, total, width=20):
     return f"{bar}"
 
 def show_page(url, origin, start_block=0):
+    global ADAPTIVE_WPM_HTML, ADAPTIVE_WPM_PDF
+    is_pdf = False
+
     # >>> FIXED: unified fetch + PDF detection
     try:
         if url.lower().endswith(".pdf"):
@@ -1159,6 +1228,7 @@ def show_page(url, origin, start_block=0):
             paragraphs, pdf_title = extract_pdf_text(url)
             links = []
             main_image = None
+            is_pdf = True
             page_title = pdf_title if pdf_title else "PDF Document"
         else:
             # Normal HTML mode
@@ -1180,6 +1250,10 @@ def show_page(url, origin, start_block=0):
 
     mode = "text"
     page = start_block if 0 <= start_block < len(text_pages) else 0
+    
+
+    # start time
+    block_start_time = time.time()
 
     while True:
         clear_screen()
@@ -1199,11 +1273,18 @@ def show_page(url, origin, start_block=0):
             pb = progress_bar(page + 1, len(text_pages))
             
             #f"{C_DIM}Block {page+1}/{len(text_pages)}{C_RESET} " #old block showing numbers
-  
-            # >optional reading menus
                 
             if SHOW_PROGESS_BAR:
-                print(f"{C_DIM}{pb}{C_RESET}")
+                # print(f"{C_DIM}{pb}{C_RESET}")
+                # --- Remaining reading time ---
+                if is_pdf:
+                    wpm = ADAPTIVE_WPM_PDF
+                else:
+                    wpm = ADAPTIVE_WPM_HTML
+
+                remaining = estimate_reading_time(paragraphs, page, wpm=wpm)
+                #remaining = estimate_reading_time(paragraphs, page)
+                print(f"{C_DIM}{pb}{remaining}{C_RESET}")
                 
             if SHOW_READING_MENUS:
                 print(f"{C_CMD}Space/↓=next  p/↑=prev  l=links  i=image  "
@@ -1229,9 +1310,9 @@ def show_page(url, origin, start_block=0):
         # ---------------- TITLE ----------------
         # Bookmark indicator
         if is_bookmarked(url):
-            bm_flag = "  [\033[38;5;34m✔ SAVED\033[0m]"       # darker green
+            bm_flag = "\033[38;5;34m✔\033[0m"       # darker green
         else:
-            bm_flag = "  [\033[38;5;124m✘ TO SAVE: m+Enter\033[0m]"  # darker red
+            bm_flag = "\033[38;5;124m✘ (m+Enter)\033[0m"  # darker red
 
         title_to_show = page_title if page_title else shorten_middle(url, cols - 6)
         
@@ -1322,8 +1403,15 @@ def show_page(url, origin, start_block=0):
                     # >>> ADDED: Auto‑update bookmark 
                     if is_bookmarked(url): 
                         save_bookmark(url, page, page_title) 
-					# <<< END ADDED
-                    
+                    # estimate time
+                    elapsed = time.time() - block_start_time
+                    words = len(paragraphs[page].split())
+                    if is_pdf:
+                        ADAPTIVE_WPM_PDF = update_adaptive_wpm(ADAPTIVE_WPM_PDF, words, elapsed)
+                    else:
+                        ADAPTIVE_WPM_HTML = update_adaptive_wpm(ADAPTIVE_WPM_HTML, words, elapsed)
+
+                    save_config()
                     continue
 
                 # try next part
