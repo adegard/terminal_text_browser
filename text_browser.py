@@ -1229,6 +1229,8 @@ def progress_bar(current, total, width=20):
 def show_page(url, origin, start_block=0):
     global ADAPTIVE_WPM_HTML, ADAPTIVE_WPM_PDF
     is_pdf = False
+    
+    url = resolve_redirect(url)
 
     # >>> FIXED: unified fetch + PDF detection
     try:
