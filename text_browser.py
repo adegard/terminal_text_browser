@@ -930,19 +930,7 @@ def search_and_select(query):
 
         if raw == "":
             c = "next"
-            
-# ADDED for extra keys:            
-        if c == "+":
-            c = "n"
-        if c == "-":
-            c = "p" 
-        if c == "n":   # PAGE DOWN keycode
-            c = "next"
-        if c == "\x10":   # PAGE UP keycode
-            c = "p"
-        if c == "KEYCODE_PAGE_DOWN":
-            c = "next"
-############
+
         if c == "q":
             return ("quit",)
 
@@ -970,10 +958,6 @@ def search_and_select(query):
         if c == "p" and page_idx > 0:
             page_idx -= 1
             continue
-# ADDED TO TEST:
-        if c == "KEYCODE_PAGE_UP" and page_idx > 0:
-            page_idx -= 1
-            c = "p"
 
         if c.isdigit():
             i = int(c)
@@ -1300,7 +1284,8 @@ def show_page(url, origin, start_block=0):
 
                 remaining = estimate_reading_time(paragraphs, page, wpm=wpm)
                 #remaining = estimate_reading_time(paragraphs, page)
-                print(f"{C_DIM}{pb}{remaining}{C_RESET}")
+                #print(f"{C_DIM}{pb}{remaining}{C_RESET}")
+                print(f"{C_DIM}{pb}{C_RESET}")
                 
             if SHOW_READING_MENUS:
                 print(f"{C_CMD}Space/↓=next  p/↑=prev  l=links  i=image  "
@@ -1421,13 +1406,7 @@ def show_page(url, origin, start_block=0):
                         save_bookmark(url, page, page_title) 
                     # estimate time
                     elapsed = time.time() - block_start_time
-                    # Clamp page index to valid range
-                    if page < 0:
-                        page = 0
-                    elif page >= len(paragraphs):
-                        page = len(paragraphs) - 1
                     words = len(paragraphs[page].split())
-                    
                     if is_pdf:
                         ADAPTIVE_WPM_PDF = update_adaptive_wpm(ADAPTIVE_WPM_PDF, words, elapsed)
                     else:
