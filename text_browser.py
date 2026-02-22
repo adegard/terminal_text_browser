@@ -1381,11 +1381,35 @@ def show_page(url, origin, start_block=0):
                 return ("open_bm", title, bm_url, bm_block)
             continue
         # --- SHARE SHORTCUT: 's' ---
+        
         if c == "s":
             clear_screen()
             print(f"{C_TITLE}=== SHARE LINK ==={C_RESET}\n")
+
+            # Try to shorten the URL with TinyURL
+            short_url = url
+            try:
+                r = session.get(
+                    "https://tinyurl.com/api-create.php",
+                    params={"url": url},
+                    timeout=10
+                )
+                r.raise_for_status()
+                su = r.text.strip()
+                if su.startswith("http"):
+                    short_url = su
+            except Exception:
+                pass  # fallback to original URL
+
+            # Show both URLs
+            print(f"{C_TITLE}Original URL:{C_RESET}")
             print(url)
-            print(f"\n{C_DIM}Press ENTER to return to block {page+1}{C_RESET}")
+            print()
+            print(f"{C_TITLE}TinyURL:{C_RESET}")
+            print(short_url)
+            print()
+
+            print(f"{C_DIM}Press ENTER to return to block {page+1}{C_RESET}")
             input()
             continue
 
