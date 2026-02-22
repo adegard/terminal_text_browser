@@ -931,7 +931,7 @@ def search_and_select(query):
         if raw == "":
             c = "next"
 # ADDED TO TEST:
-        if c == "\x0e":   # PAGE DOWN keycode
+        if c == "n":   # PAGE DOWN keycode
             c = "next"
 
         if c == "\x10":   # PAGE UP keycode
@@ -970,7 +970,7 @@ def search_and_select(query):
 # ADDED TO TEST:
         if c == "KEYCODE_PAGE_UP" and page_idx > 0:
             page_idx -= 1
-            c = "next"
+            c = "p"
 
         if c.isdigit():
             i = int(c)
