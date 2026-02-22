@@ -930,10 +930,16 @@ def search_and_select(query):
 
         if raw == "":
             c = "next"
+# ADDED TO TEST:
+        if c == "\x0e":   # PAGE DOWN keycode
+            c = "next"
+
+        if c == "\x10":   # PAGE UP keycode
+            c = "p"
 
         if c == "KEYCODE_PAGE_DOWN":
             c = "next"
-
+############
         if c == "q":
             return ("quit",)
 
@@ -961,7 +967,7 @@ def search_and_select(query):
         if c == "p" and page_idx > 0:
             page_idx -= 1
             continue
-
+# ADDED TO TEST:
         if c == "KEYCODE_PAGE_UP" and page_idx > 0:
             page_idx -= 1
             c = "next"
