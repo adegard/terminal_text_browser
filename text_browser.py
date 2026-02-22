@@ -1440,14 +1440,14 @@ def show_page(url, origin, start_block=0):
                     if is_bookmarked(url): 
                         save_bookmark(url, page, page_title) 
                     # estimate time
-                    elapsed = time.time() - block_start_time
-                    words = len(paragraphs[page].split())
-                    if is_pdf:
-                        ADAPTIVE_WPM_PDF = update_adaptive_wpm(ADAPTIVE_WPM_PDF, words, elapsed)
-                    else:
-                        ADAPTIVE_WPM_HTML = update_adaptive_wpm(ADAPTIVE_WPM_HTML, words, elapsed)
+                    # elapsed = time.time() - block_start_time
+                    # words = len(paragraphs[page].split())
+                    # if is_pdf:
+                    #    ADAPTIVE_WPM_PDF = update_adaptive_wpm(ADAPTIVE_WPM_PDF, words, elapsed)
+                    # else:
+                    #    ADAPTIVE_WPM_HTML = update_adaptive_wpm(ADAPTIVE_WPM_HTML, words, elapsed)
 
-                    save_config()
+                    # save_config()
                     continue
 
                 # try next part
