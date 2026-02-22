@@ -348,6 +348,14 @@ def read_key():
 
 # ========= USEFULL HELPERS =========
 
+def resolve_redirect(url):
+    try:
+        r = session.head(url, allow_redirects=True, timeout=10)
+        return r.url
+    except Exception:
+        return url
+
+
 def update_adaptive_wpm(current_wpm, words, seconds):
     if seconds <= 0:
         return current_wpm
@@ -1007,6 +1015,7 @@ def handle_nav(nav):
         # OPEN URL
         if kind == "open_url":
             _, url, origin, block = nav
+            url = resolve_redirect(url)
             nav = show_page(url, origin, block)
             continue
 
@@ -1601,8 +1610,9 @@ def main():
             # ---- unified navigation handling ----
             while isinstance(nav, tuple) and nav[0] == "open_url":
                 _, url, origin, block = nav
+                url = resolve_redirect(url)
                 nav = show_page(url, origin, block)
-
+                
             # QUIT
             if nav == ("quit",) or nav == "quit":
                 break
