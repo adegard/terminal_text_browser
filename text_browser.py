@@ -47,8 +47,8 @@ DEFAULT_CONFIG = {
     "SHOW_READING_MENUS": True,
     "SHOW_PAGE_TITLE": True,
     "SHOW_PROGESS_BAR": True,
-    "ADAPTIVE_WPM_PDF": 120,
-    "ADAPTIVE_WPM_HTML": 120
+    "ADAPTIVE_WPM_PDF": 70,
+    "ADAPTIVE_WPM_HTML": 70
 }
 
 
@@ -102,8 +102,8 @@ CHRONOLOGY_LENGTH = _cfg.get("CHRONOLOGY_LENGTH", 5)
 SHOW_READING_MENUS = _cfg.get("SHOW_READING_MENUS", True)
 SHOW_PAGE_TITLE = _cfg.get("SHOW_PAGE_TITLE", True)
 SHOW_PROGESS_BAR = _cfg.get("SHOW_PROGESS_BAR", True)
-ADAPTIVE_WPM_PDF = _cfg.get("ADAPTIVE_WPM_PDF", 120)
-ADAPTIVE_WPM_HTML = _cfg.get("ADAPTIVE_WPM_HTML", 120)
+ADAPTIVE_WPM_PDF = _cfg.get("ADAPTIVE_WPM_PDF", 70)
+ADAPTIVE_WPM_HTML = _cfg.get("ADAPTIVE_WPM_HTML", 70)
 
 
 
@@ -754,6 +754,8 @@ def settings_menu():
         print(f"8. Show menus in reading: {SHOW_READING_MENUS}")
         print(f"9. Show page title page: {SHOW_PAGE_TITLE}")
         print(f"10. Show progress/remaining: {SHOW_PROGESS_BAR}")
+        print(f"11. Words per Min (PDF): {ADAPTIVE_WPM_PDF}")
+        print(f"12. Words per Min (HTML): {ADAPTIVE_WPM_HTML}")
         print("\nq = back\n")
 
         c = input("> ").strip().lower()
@@ -847,6 +849,16 @@ def settings_menu():
 
         if c == "10":
             SHOW_PROGESS_BAR = not SHOW_PROGESS_BAR
+            save_config()
+            continue
+
+        if c == "11":
+            ADAPTIVE_WPM_PDF = not ADAPTIVE_WPM_PDF
+            save_config()
+            continue
+
+        if c == "12":
+            ADAPTIVE_WPM_HTML = not ADAPTIVE_WPM_HTML
             save_config()
             continue
 
