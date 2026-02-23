@@ -375,9 +375,9 @@ def resolve_redirect(url):
 #    return (1 - alpha) * current_wpm + alpha * measured
 
 
-def estimate_reading_time(paragraphs, current_block, wpm=None):
-    if wpm is None:
-        wpm = ADAPTIVE_WPM
+def estimate_reading_time(paragraphs, current_block, wpm=70):
+    # if wpm is None:
+    #    wpm = ADAPTIVE_WPM
 
     total_blocks = len(paragraphs)
 
