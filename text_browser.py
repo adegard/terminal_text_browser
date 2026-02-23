@@ -1249,7 +1249,7 @@ def progress_bar(current, total, width=20):
     # bar = "█" * filled + "░" * empty
     # bar = "•" * filled + "·" * empty
     # bar = "▮" * filled + "▯" * empty
-    bar = "─" * filled + ">" + " " * (empty-1) + "|"
+    bar = "─" * filled + "" + "+" * (empty-1) + ""
 
     percent = int(ratio * 100)
 
@@ -1353,7 +1353,7 @@ def show_page(url, origin, start_block=0):
         if is_bookmarked(url):
             bm_flag = "\033[38;5;34m✔\033[0m"       # darker green
         else:
-            bm_flag = "\033[38;5;124m✘ (m+Enter)\033[0m"  # darker red
+            bm_flag = "" # "\033[38;5;124m✘ (m+Enter)\033[0m"  # darker red
 
         title_to_show = page_title if page_title else shorten_middle(url, cols - 6)
         
@@ -1361,7 +1361,7 @@ def show_page(url, origin, start_block=0):
             print(f"{C_TEXT}{title_to_show}{bm_flag}{C_RESET}")
         else:
             print(f"{bm_flag}\n")
-        print("> ", end="", flush=True)
+        print(" ", end="", flush=True)
 
         # ---------------- INPUT ----------------
         key = read_key()
@@ -1575,6 +1575,7 @@ def main():
             action = home()
 
             if action[0] == "quit":
+                clear_screen()
                 break
 
             if action[0] == "bookmarks":
@@ -1593,6 +1594,7 @@ def main():
                         nav = show_page(url2, origin2, block2)
 
                     if nav == ("quit",):
+                        clear_screen()
                         break
                 continue
 
@@ -1617,6 +1619,7 @@ def main():
                 continue
 
             if res[0] == "quit":
+                clear_screen()
                 break
 
             if res[0] == "url":
@@ -1651,6 +1654,7 @@ def main():
                 
             # QUIT
             if nav == ("quit",) or nav == "quit":
+                clear_screen()
                 break
 
             # HOME
