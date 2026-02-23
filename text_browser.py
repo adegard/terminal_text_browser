@@ -739,7 +739,7 @@ def print_search_results_page(results_page, page_idx, total_pages):
 # ========= SETTINGS MENU =========
 def settings_menu():
     global PARAS_PER_PAGE, DEFAULT_ENGINE, SEARCH_RESULTS_PER_PAGE, COLOR_THEME, MAX_CHARS_PER_BLOCK, GROQ_API_KEY
-    global CHRONOLOGY_LENGTH, SHOW_READING_MENUS, SHOW_PAGE_TITLE, SHOW_PROGESS_BAR
+    global CHRONOLOGY_LENGTH, SHOW_READING_MENUS, SHOW_PAGE_TITLE, SHOW_PROGESS_BAR, ADAPTIVE_WPM_PDF, ADAPTIVE_WPM_HTML
     
     while True:
         clear_screen()
@@ -853,14 +853,19 @@ def settings_menu():
             continue
 
         if c == "11":
-            ADAPTIVE_WPM_PDF = not ADAPTIVE_WPM_PDF
-            save_config()
+            val = input("Words per min for PDF(60–300): ").strip()
+            if val.isdigit() and 60 <= int(val) <= 300:
+                ADAPTIVE_WPM_PDF = int(val)
+                save_config()
             continue
 
         if c == "12":
-            ADAPTIVE_WPM_HTML = not ADAPTIVE_WPM_HTML
-            save_config()
+            val = input("Words per min for HTML pages (60–300): ").strip()
+            if val.isdigit() and 60 <= int(val) <= 300:
+                ADAPTIVE_WPM_HTML = int(val)
+                save_config()
             continue
+
 
 # ========= HOME =========
 def home():
