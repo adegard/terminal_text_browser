@@ -309,6 +309,15 @@ def save_bookmark(url, block_index, title=None):
             safe_title = t if t else ""
             f.write(f"{safe_title}|||{u}|||{b}\n")
 
+def delete_bookmark_by_url(url):
+    bookmarks = load_bookmarks()
+    new_list = [(t, u, b) for (t, u, b) in bookmarks if u != url]
+
+    with open(BOOKMARK_FILE, "w") as f:
+        for t, u, b in new_list:
+            safe_title = t if t else ""
+            f.write(f"{safe_title}|||{u}|||{b}\n")
+
 def delete_bookmark(i):
     b = load_bookmarks()
     if 0 <= i < len(b):
@@ -356,14 +365,14 @@ def resolve_redirect(url):
         return url
 
 
-def update_adaptive_wpm(current_wpm, words, seconds):
-    if seconds <= 0:
-        return current_wpm
+# def update_adaptive_wpm(current_wpm, words, seconds):
+#    if seconds <= 0:
+#        return current_wpm
 
-    measured = (words / seconds) * 60
-    alpha = 0.2  # smoothing factor
-
-    return (1 - alpha) * current_wpm + alpha * measured
+#    measured = (words / seconds) * 60
+#    alpha = 0.2  # smoothing factor
+#
+#    return (1 - alpha) * current_wpm + alpha * measured
 
 
 def estimate_reading_time(paragraphs, current_block, wpm=None):
@@ -1220,7 +1229,11 @@ def progress_bar(current, total, width=20):
     filled = int(ratio * width)
     empty = width - filled
 
-    bar = "█" * filled + "░" * empty
+    # bar = "█" * filled + "░" * empty
+    # bar = "•" * filled + "·" * empty
+    # bar = "▮" * filled + "▯" * empty
+    bar = "─" * filled + ">" + " " * (empty-1) + "|"
+
     percent = int(ratio * 100)
 
     #return f"[{bar}] {percent}%"
@@ -1286,8 +1299,7 @@ def show_page(url, origin, start_block=0):
             #f"{C_DIM}Block {page+1}/{len(text_pages)}{C_RESET} " #old block showing numbers
                 
             if SHOW_PROGESS_BAR:
-                # print(f"{C_DIM}{pb}{C_RESET}")
-                # --- Remaining reading time ---
+                # --- Progess Bar & Remaining reading time ---
                 if is_pdf:
                     wpm = ADAPTIVE_WPM_PDF
                 else:
@@ -1295,8 +1307,8 @@ def show_page(url, origin, start_block=0):
 
                 remaining = estimate_reading_time(paragraphs, page, wpm=wpm)
                 #remaining = estimate_reading_time(paragraphs, page)
-                #print(f"{C_DIM}{pb}{remaining}{C_RESET}")
-                print(f"{C_DIM}{pb}{C_RESET}")
+                print(f"{C_DIM}{pb}{remaining}{C_RESET}")
+                # print(f"{C_DIM}{pb}{C_RESET}")
                 
             if SHOW_READING_MENUS:
                 print(f"{C_CMD}Space/↓=next  p/↑=prev  l=links  i=image  "
@@ -1453,9 +1465,14 @@ def show_page(url, origin, start_block=0):
                 # try next part
                 result = try_load_next_part(url, paragraphs)
                 if result:
+                    old_url = url
                     paragraphs, links, main_image, page_title, url = result
                     text_pages = build_text_pages(paragraphs)
                     link_pages = list(paginate(links, 5))
+                    # Delete bookmark oldest page:
+                    delete_bookmark_by_url(old_url)
+                    # Auto bookmark new page:
+                    save_bookmark(url, page, page_title) 
                     continue
 
                 input(f"{C_DIM}End of content.{C_RESET} Enter…")
