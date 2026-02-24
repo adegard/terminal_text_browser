@@ -19,7 +19,7 @@ import time
 
 
 # ========= BASIC CONFIG =========
-APP_VERSION = "1.4"
+APP_VERSION = "1.51"
 
 SAFE_MODE = True
 STRIP_DDG_TRACKING = True
@@ -401,6 +401,8 @@ def auto_update():
 
     if remote == APP_VERSION:
         print(f"\n{C_CMD}You are already up to date.{C_RESET}")
+        print(f"\n{C_CMD}Any question? please add a comment on Github page:{C_RESET}")
+        print(f"\n{C_CMD}https://github.com/adegard/terminal_text_browser/{C_RESET}")
         input("\nPress ENTER…")
         return
 
