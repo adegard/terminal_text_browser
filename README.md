@@ -115,6 +115,10 @@ pip install -r requirements.txt
 
 python text_browser.py
 
+# Updating
+
+The script automatically check for new version at startup
+
 ## 🧹 HTML Content Extraction & PDF parsing
 - Removes:
   - Scripts
