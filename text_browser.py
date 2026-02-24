@@ -19,7 +19,7 @@ import time
 
 
 # ========= BASIC CONFIG =========
-APP_VERSION = "1.3"
+APP_VERSION = "1.4"
 
 SAFE_MODE = True
 STRIP_DDG_TRACKING = True
@@ -361,39 +361,10 @@ def read_key():
 def startup_update_check():
     remote = get_remote_version()
     if not remote:
-        return  # no internet or GitHub down
+        return
 
     if remote != APP_VERSION:
-        clear_screen()
-        print(f"{C_TITLE}=== UPDATE AVAILABLE ==={C_RESET}\n")
-        print(f"Current version: {APP_VERSION}")
-        print(f"Latest version:  {remote}\n")
-        print("A new version is available.")
-        print("Updating automatically...\n")
-
-        new_script = download_latest_script()
-        if not new_script:
-            print(f"{C_ERR}Failed to download new script.{C_RESET}")
-            time.sleep(2)
-            return
-
-        current_file = os.path.abspath(sys.argv[0])
-        backup_file = current_file + ".backup"
-
-        try:
-            shutil.copy2(current_file, backup_file)
-            with open(current_file, "w") as f:
-                f.write(new_script)
-
-            print(f"{C_CMD}Update complete!{C_RESET}")
-            print(f"Backup saved as: {backup_file}")
-            print("\nRestarting automatically...\n")
-            time.sleep(2)
-            os.execv(sys.executable, ['python3'] + sys.argv)
-
-        except Exception as e:
-            print(f"{C_ERR}Update failed: {e}{C_RESET}")
-            time.sleep(2)
+        auto_update()
 
 
 def get_remote_version():
@@ -414,7 +385,6 @@ def download_latest_script():
         return r.text
     except Exception:
         return None
-
 
 def auto_update():
     clear_screen()
@@ -454,11 +424,15 @@ def auto_update():
 
         print(f"\n{C_CMD}Update complete!{C_RESET}")
         print(f"Backup saved as: {backup_file}")
-        print("\nRestart the browser to use the new version.")
+        print("\nRestarting automatically...\n")
+        time.sleep(1)
+
+        # ⭐ Restart the script
+        os.execv(sys.executable, ['python3'] + sys.argv)
+
     except Exception as e:
         print(f"{C_ERR}Update failed: {e}{C_RESET}")
-
-    input("\nPress ENTER…")
+        input("\nPress ENTER…")
 
 
 
@@ -994,7 +968,7 @@ def home():
         '-._'''''_.-'     .'
              '-.....-'
         """)
-        print(f"\n{C_TITLE}=== TEXT BROWSER {APP_VERSION}==={C_RESET}")
+        print(f"\n{C_TITLE}=== TEXT BROWSER {APP_VERSION} ==={C_RESET}")
         print(f"{C_DIM}(Search text / ifl + text=I'm feeling lucky / Url / bm=bookmarks / c=chronology / s=settings / ai + text=ask AI / q=quit){C_RESET}")
 
         t = input("> ").strip()
