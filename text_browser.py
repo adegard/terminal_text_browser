@@ -360,7 +360,8 @@ def read_key():
 # ========= USEFULL HELPERS =========
 
 def get_remote_version():
-    url = "https://raw.githubusercontent.com/adegard/terminal_text_browser/main/version.txt"
+    url = "https://raw.githubusercontent.com/adegard/terminal_text_browser/main/version.txt?nocache=" + str(time.time())
+
     try:
         r = session.get(url, timeout=10)
         r.raise_for_status()
