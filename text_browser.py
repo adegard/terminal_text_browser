@@ -19,7 +19,7 @@ import time
 
 
 # ========= BASIC CONFIG =========
-APP_VERSION = "1.1"
+APP_VERSION = "1.2"
 
 SAFE_MODE = True
 STRIP_DDG_TRACKING = True
@@ -361,7 +361,6 @@ def read_key():
 
 def get_remote_version():
     url = "https://raw.githubusercontent.com/adegard/terminal_text_browser/main/version.txt"
-
     try:
         r = session.get(url, timeout=10)
         r.raise_for_status()
@@ -957,7 +956,7 @@ def home():
         '-._'''''_.-'     .'
              '-.....-'
         """)
-        print(f"\n{C_TITLE}=== TEXT BROWSER ==={C_RESET}")
+        print(f"\n{C_TITLE}=== TEXT BROWSER {APP_VERSION}==={C_RESET}")
         print(f"{C_DIM}(Search text / ifl + text=I'm feeling lucky / Url / bm=bookmarks / c=chronology / s=settings / ai + text=ask AI / q=quit){C_RESET}")
 
         t = input("> ").strip()
