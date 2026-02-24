@@ -19,6 +19,8 @@ import time
 
 
 # ========= BASIC CONFIG =========
+APP_VERSION = "1.0"
+
 SAFE_MODE = True
 STRIP_DDG_TRACKING = True
 
@@ -356,6 +358,71 @@ def read_key():
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 # ========= USEFULL HELPERS =========
+
+def get_remote_version():
+    url = "https://raw.githubusercontent.com/adegard/terminal_text_browser/refs/heads/main/version.txt"
+    try:
+        r = session.get(url, timeout=10)
+        r.raise_for_status()
+        return r.text.strip()
+    except Exception:
+        return None
+
+def download_latest_script():
+    url = "https://raw.githubusercontent.com/adegard/terminal_text_browser/refs/heads/main/text_browser.py"
+    try:
+        r = session.get(url, timeout=10)
+        r.raise_for_status()
+        return r.text
+    except Exception:
+        return None
+
+
+def auto_update():
+    clear_screen()
+    print(f"{C_TITLE}=== AUTO UPDATE ==={C_RESET}\n")
+    print(f"Current version: {APP_VERSION}")
+
+    remote = get_remote_version()
+    if not remote:
+        print(f"{C_ERR}Could not fetch remote version.{C_RESET}")
+        input("\nPress ENTER…")
+        return
+
+    print(f"Latest version:  {remote}")
+
+    if remote == APP_VERSION:
+        print(f"\n{C_CMD}You are already up to date.{C_RESET}")
+        input("\nPress ENTER…")
+        return
+
+    print(f"\n{C_ERR}New version available!{C_RESET}")
+    print("Downloading…")
+
+    new_script = download_latest_script()
+    if not new_script:
+        print(f"{C_ERR}Failed to download new script.{C_RESET}")
+        input("\nPress ENTER…")
+        return
+
+    current_file = os.path.abspath(sys.argv[0])
+    backup_file = current_file + ".backup"
+
+    try:
+        shutil.copy2(current_file, backup_file)
+
+        with open(current_file, "w") as f:
+            f.write(new_script)
+
+        print(f"\n{C_CMD}Update complete!{C_RESET}")
+        print(f"Backup saved as: {backup_file}")
+        print("\nRestart the browser to use the new version.")
+    except Exception as e:
+        print(f"{C_ERR}Update failed: {e}{C_RESET}")
+
+    input("\nPress ENTER…")
+
+
 
 def resolve_redirect(url):
     try:
@@ -756,6 +823,7 @@ def settings_menu():
         print(f"10. Show progress/remaining: {SHOW_PROGESS_BAR}")
         print(f"11. Words per Min (PDF): {ADAPTIVE_WPM_PDF}")
         print(f"12. Words per Min (HTML): {ADAPTIVE_WPM_HTML}")
+        print(f"13. Check for updates")
         print("\nq = back\n")
 
         c = input("> ").strip().lower()
@@ -866,6 +934,10 @@ def settings_menu():
                 save_config()
             continue
 
+        if c == "13":
+            clear_screen()
+            auto_update()
+            continue
 
 # ========= HOME =========
 def home():
@@ -884,7 +956,7 @@ def home():
         '-._'''''_.-'     .'
              '-.....-'
         """)
-        print(f"\n{C_TITLE}=== TEXT BROWSER V.0 ==={C_RESET}")
+        print(f"\n{C_TITLE}=== TEXT BROWSER ==={C_RESET}")
         print(f"{C_DIM}(Search text / ifl + text=I'm feeling lucky / Url / bm=bookmarks / c=chronology / s=settings / ai + text=ask AI / q=quit){C_RESET}")
 
         t = input("> ").strip()
@@ -1307,14 +1379,11 @@ def show_page(url, origin, start_block=0):
             if page < 0:
                 page = 0
 
-            for line in text_pages[page]:
-                print(f"{C_TEXT}{line}{C_RESET}")
-
             # progress bar instead of block count
             pb = progress_bar(page + 1, len(text_pages))
-            
+
             #f"{C_DIM}Block {page+1}/{len(text_pages)}{C_RESET} " #old block showing numbers
-                
+                                           
             if SHOW_PROGESS_BAR:
                 # --- Progess Bar & Remaining reading time ---
                 if is_pdf:
@@ -1324,9 +1393,13 @@ def show_page(url, origin, start_block=0):
 
                 remaining = estimate_reading_time(paragraphs, page, wpm=wpm)
                 #remaining = estimate_reading_time(paragraphs, page)
-                print(f"{C_DIM}{pb}{remaining}{C_RESET}")
-                # print(f"{C_DIM}{pb}{C_RESET}")
+                # print(f"{C_DIM}{pb}{remaining}{C_RESET}")
+                print(f"{C_DIM}{pb} {page+1}/{len(text_pages)}{C_RESET}")
                 
+            for line in text_pages[page]:
+                print(f"{C_TEXT}{line}{C_RESET}")
+ 
+
             if SHOW_READING_MENUS:
                 print(f"{C_CMD}Space/↓=next  p/↑=prev  l=links  i=image  "
                     f"b=back  bc=chronology-back  m=save  s=share bm=bookmarks  h=home  q=quit{C_RESET}"
@@ -1348,7 +1421,7 @@ def show_page(url, origin, start_block=0):
                 f"t=text  b=back  h=home  q=quit{C_RESET}"
             )
 
-        # ---------------- TITLE ----------------
+        # ---------------- TITLE & BOOKMARKED----------------
         # Bookmark indicator
         if is_bookmarked(url):
             bm_flag = "\033[38;5;34m✔\033[0m"       # darker green
@@ -1360,7 +1433,7 @@ def show_page(url, origin, start_block=0):
         if SHOW_PAGE_TITLE:
             print(f"{C_TEXT}{title_to_show}{bm_flag}{C_RESET}")
         else:
-            print(f"{bm_flag}\n")
+            print(f"{bm_flag}")
         print(" ", end="", flush=True)
 
         # ---------------- INPUT ----------------
