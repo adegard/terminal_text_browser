@@ -19,7 +19,7 @@ import time
 
 
 # ========= BASIC CONFIG =========
-APP_VERSION = "1.1"
+APP_VERSION = "1.0"
 
 SAFE_MODE = True
 STRIP_DDG_TRACKING = True
@@ -360,7 +360,8 @@ def read_key():
 # ========= USEFULL HELPERS =========
 
 def get_remote_version():
-    url = "https://raw.githubusercontent.com/adegard/terminal_text_browser/refs/heads/main/version.txt"
+    url = "https://raw.githubusercontent.com/adegard/terminal_text_browser/main/version.txt"
+"
     try:
         r = session.get(url, timeout=10)
         r.raise_for_status()
@@ -369,7 +370,7 @@ def get_remote_version():
         return None
 
 def download_latest_script():
-    url = "https://raw.githubusercontent.com/adegard/terminal_text_browser/refs/heads/main/text_browser.py"
+    url = "https://raw.githubusercontent.com/adegard/terminal_text_browser/main/text_browser.py"
     try:
         r = session.get(url, timeout=10)
         r.raise_for_status()
