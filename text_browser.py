@@ -19,7 +19,7 @@ import time
 
 
 # ========= BASIC CONFIG =========
-APP_VERSION = "1.2"
+APP_VERSION = "1.3"
 
 SAFE_MODE = True
 STRIP_DDG_TRACKING = True
@@ -358,6 +358,43 @@ def read_key():
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 # ========= USEFULL HELPERS =========
+def startup_update_check():
+    remote = get_remote_version()
+    if not remote:
+        return  # no internet or GitHub down
+
+    if remote != APP_VERSION:
+        clear_screen()
+        print(f"{C_TITLE}=== UPDATE AVAILABLE ==={C_RESET}\n")
+        print(f"Current version: {APP_VERSION}")
+        print(f"Latest version:  {remote}\n")
+        print("A new version is available.")
+        print("Updating automatically...\n")
+
+        new_script = download_latest_script()
+        if not new_script:
+            print(f"{C_ERR}Failed to download new script.{C_RESET}")
+            time.sleep(2)
+            return
+
+        current_file = os.path.abspath(sys.argv[0])
+        backup_file = current_file + ".backup"
+
+        try:
+            shutil.copy2(current_file, backup_file)
+            with open(current_file, "w") as f:
+                f.write(new_script)
+
+            print(f"{C_CMD}Update complete!{C_RESET}")
+            print(f"Backup saved as: {backup_file}")
+            print("\nRestarting automatically...\n")
+            time.sleep(2)
+            os.execv(sys.executable, ['python3'] + sys.argv)
+
+        except Exception as e:
+            print(f"{C_ERR}Update failed: {e}{C_RESET}")
+            time.sleep(2)
+
 
 def get_remote_version():
     url = "https://raw.githubusercontent.com/adegard/terminal_text_browser/main/version.txt?nocache=" + str(time.time())
@@ -370,7 +407,7 @@ def get_remote_version():
         return None
 
 def download_latest_script():
-    url = "https://raw.githubusercontent.com/adegard/terminal_text_browser/main/text_browser.py"
+    url = "https://raw.githubusercontent.com/adegard/terminal_text_browser/main/text_browser.py?nocache=" + str(time.time())
     try:
         r = session.get(url, timeout=10)
         r.raise_for_status()
@@ -1774,4 +1811,5 @@ def main():
                 continue
 
 if __name__ == "__main__":
+    startup_update_check()
     main()
