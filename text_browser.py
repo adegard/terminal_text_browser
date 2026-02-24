@@ -19,7 +19,7 @@ import time
 
 
 # ========= BASIC CONFIG =========
-APP_VERSION = "1.0"
+APP_VERSION = "1.1"
 
 SAFE_MODE = True
 STRIP_DDG_TRACKING = True
