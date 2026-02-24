@@ -361,7 +361,7 @@ def read_key():
 
 def get_remote_version():
     url = "https://raw.githubusercontent.com/adegard/terminal_text_browser/main/version.txt"
-"
+
     try:
         r = session.get(url, timeout=10)
         r.raise_for_status()
