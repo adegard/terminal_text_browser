@@ -19,7 +19,7 @@ import time
 
 
 # ========= BASIC CONFIG =========
-APP_VERSION = "1.51"
+APP_VERSION = "1.52"
 
 SAFE_MODE = True
 STRIP_DDG_TRACKING = True
@@ -358,6 +358,64 @@ def read_key():
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 # ========= USEFULL HELPERS =========
+
+def wattpad_next_chapter(soup, base_url):
+    nav = soup.find("div", id="story-part-navigation")
+    if not nav:
+        return None
+
+    a = nav.find("a", href=True)
+    if not a:
+        return None
+
+    return urljoin(base_url, a["href"].strip())
+
+
+
+def find_next_chapter_link(links):
+    """
+    Given a list of (label, url), try to detect the 'next chapter' link.
+    Returns the URL or None.
+    """
+    if not links:
+        return None
+
+    # Normalize and score
+    candidates = []
+    for label, url in links:
+        text = (label or "").strip().lower()
+
+        score = 0
+
+        # English
+        if "next" in text:
+            score += 3
+        if "next chapter" in text:
+            score += 5
+        if "continue" in text:
+            score += 2
+
+        # French
+        if "suivant" in text:
+            score += 4
+        if "chapitre suivant" in text:
+            score += 5
+
+        # Symbols often used for next
+        if text in (">", ">>", "»", "›", "→"):
+            score += 2
+
+        if score > 0:
+            candidates.append((score, url))
+
+    if not candidates:
+        return None
+
+    # Highest score wins
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return candidates[0][1]
+
+
 def startup_update_check():
     remote = get_remote_version()
     if not remote:
@@ -618,9 +676,13 @@ def extract_single_page(html, base):
             href = unwrap_generic_redirect(urljoin(base, a["href"]))
             if not is_ad_or_tracker(href):
                 links.append((label if label else href, href))
+        #added
+        # Wattpad next-chapter detection
+        next_chapter = wattpad_next_chapter(soup, base)
 
         main_image = fetch_main_image_url(soup, base)
         title = extract_title(soup)
+#return paragraphs, links, main_image, title, next_chapter
         return paragraphs, links, main_image, title
 
     candidates = []
@@ -1342,6 +1404,7 @@ def progress_bar(current, total, width=20):
     #return f"[{bar}] {percent}%"
     return f"{bar}"
 
+# THE MAIN READING LOOP #
 def show_page(url, origin, start_block=0):
     global ADAPTIVE_WPM_HTML, ADAPTIVE_WPM_PDF
     is_pdf = False
@@ -1359,8 +1422,16 @@ def show_page(url, origin, start_block=0):
             page_title = pdf_title if pdf_title else "PDF Document"
         else:
             # Normal HTML mode
+
             html = fetch(url)
             paragraphs, links, main_image, page_title = extract_single_page(html, url)
+
+            # NEW: detect next chapter (Wattpad)
+            soup = BeautifulSoup(html, "html.parser")
+            next_chapter = wattpad_next_chapter(soup, url)
+            
+            #old
+            #paragraphs, links, main_image, page_title = extract_single_page(html, url)
 
     except Exception as e:
         print(f"{C_ERR}{e}{C_RESET}")
@@ -1566,7 +1637,7 @@ def show_page(url, origin, start_block=0):
                     # save_config()
                     continue
 
-                # try next part
+                # try next part (add /page-number for scrolling discovered new page
                 result = try_load_next_part(url, paragraphs)
                 if result:
                     old_url = url
@@ -1579,6 +1650,21 @@ def show_page(url, origin, start_block=0):
                     save_bookmark(url, page, page_title) 
                     continue
 
+                # >>> NEW: Wattpad next-chapter auto-jump
+                if next_chapter:
+                    clear_screen()
+                    print(f"{C_TITLE}Next chapter detected!{C_RESET}")
+                    print(f"{C_LINK}{next_chapter}{C_RESET}")
+                    time.sleep(0.6)
+                    
+                    # NEW: remove old chapter bookmark 
+                    delete_bookmark_by_url(url)
+
+                    save_bookmark(next_chapter, 0, page_title)
+                    return ("open_url", next_chapter, "next_chapter", 0)
+
+
+                # If nothing else found
                 input(f"{C_DIM}End of content.{C_RESET} Enter…")
                 continue
 
