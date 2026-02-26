@@ -59,7 +59,7 @@ A terminal‑friendly web browser built for comfortable reading on small devices
   - `b` — go back on search results
   - `bc` — go back in chronology (last visited page)
   - `m` — save current page and block as bookmark
-  - `s` — share (showing full url to be copied)
+  - `s` — share (show full url and tiny url to be copied)
   - `ai + text` — ask something to ai
   - `ai` — ask ai to comment the current block of text
   - `bm` — open bookmark manager
