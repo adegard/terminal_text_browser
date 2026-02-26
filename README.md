@@ -16,7 +16,7 @@ A terminal‑friendly web browser built for comfortable reading on small devices
 
 
 
-# Terminal Text Browser — Features Overview
+# Features Overview
 
 ## 🏠 Home Screen
 - Accepts:
@@ -24,6 +24,7 @@ A terminal‑friendly web browser built for comfortable reading on small devices
   - Domain shortcuts (`example.com`)
   - Search queries (sent to DuckDuckGo Lite, check other provider in settings), also 'ifl'+text = for "I'm feeling lucky" search-method, which takes the first result)
   - Ask AI in terminal
+  - Automatic page/chapter switch on Wattpad stories
 - Commands:
   - `bm` — open bookmark manager
   - `c` — open chronology
