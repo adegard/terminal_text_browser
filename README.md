@@ -1,5 +1,5 @@
 # TERMINAL TEXT BROWSER 
-A terminal‑friendly web browser built for comfortable reading on small devices. It turns websites into clean, book‑style pages and remembers exactly where you left off — down to the last paragraph — with automatic progress saving for bookmarked pages.
+A terminal‑friendly web browser built for comfortable reading on small devices. It turns websites into clean, book‑style pages and remembers exactly where you left off — down to the last paragraph — with automatic progress saving for bookmarked pages. Continous Wattpad stories reading by automatic chapter change.
 </br>
 
            _.-''''''-._
