@@ -15,8 +15,6 @@ A terminal‑friendly web browser built for comfortable reading on small devices
              '-.....-'
 
 
-![Screenshot](screen.jpg?raw=true "Screenshot")
-
 # Features Overview
 
 ## 🏠 Home Screen
@@ -134,3 +132,5 @@ The script automatically check for new version at startup
   - Links
 
 ---
+
+![Screenshot](screen.jpg?raw=true "Screenshot")
