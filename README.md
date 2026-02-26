@@ -15,6 +15,7 @@ A terminal‑friendly web browser built for comfortable reading on small devices
              '-.....-'
 
 
+![Screenshot](screen.jpg?raw=true "Screenshot")
 
 # Features Overview
 
