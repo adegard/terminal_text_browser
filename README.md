@@ -2,19 +2,6 @@
 A terminal‑friendly web browser built for comfortable reading on small devices. It turns websites into clean, book‑style pages and remembers exactly where you left off — down to the last paragraph — with automatic progress saving for bookmarked pages. Continous Wattpad stories reading by automatic chapter change.
 </br>
 
-           _.-''''''-._
-        .-'  _     _   '-.
-      .'    (_)   (_)     '.
-     /      .-'''-.         \
-    |     .'       `.        |
-    |    /  .---.    \       |
-    |    |  /   \ |   |      |
-     \   \  \___/ /   /     /
-      '.  '._   _.'  .'     /
-        '-._'''''_.-'     .'
-             '-.....-'
-
-
 # Features Overview
 
 ## 🏠 Home Screen
