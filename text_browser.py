@@ -19,7 +19,6 @@ import time
 import hashlib
 
 
-
 # ========= BASIC CONFIG =========
 APP_VERSION = "1.53"
 
