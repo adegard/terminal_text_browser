@@ -570,7 +570,10 @@ def extract_pdf_text(url):
         try:
             with open(text_cache, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            return data["paragraphs"], data["title"]
+            return {
+                "paragraphs": data["paragraphs"],
+                "title": data["title"]
+            }
         except Exception:
             pass  # fallback to full extraction
 
@@ -584,7 +587,10 @@ def extract_pdf_text(url):
             r = session.get(url, timeout=20, stream=True)
             r.raise_for_status()
         except Exception as e:
-            return [f"[PDF fetch error: {e}]"]
+            return {
+                "paragraphs": [f"[PDF fetch error: {e}]"],
+                "title": "PDF Error"
+            }
 
         with open(cache_path, "wb") as f:
             for chunk in r.iter_content(8192):
@@ -596,7 +602,10 @@ def extract_pdf_text(url):
     try:
         reader = PyPDF2.PdfReader(BytesIO(pdf_bytes))
     except Exception as e:
-        return [f"[PDF parse error: {e}]"]
+        return {
+            "paragraphs": [f"[PDF parse error: {e}]"],
+            "title": "PDF Error"
+        }
 
     pdf_title = extract_pdf_title(reader)
 
@@ -608,7 +617,10 @@ def extract_pdf_text(url):
             paragraphs.append(text)
 
     if not paragraphs:
-        return ["[PDF contains no extractable text]"], pdf_title
+        return {
+            "paragraphs": ["[PDF contains no extractable text]"],
+            "title": pdf_title
+        }
 
     # SAVE TEXT CACHE
     try:
@@ -617,7 +629,11 @@ def extract_pdf_text(url):
     except:
         pass
 
-    return paragraphs, pdf_title
+    return {
+        "paragraphs": paragraphs,
+        "title": pdf_title
+    }
+
 
 def extract_pdf_title(reader):
     """
@@ -1464,7 +1480,10 @@ def show_page(url, origin, start_block=0):
     try:
         if url.lower().endswith(".pdf"):
             # PDF mode
-            paragraphs, pdf_title = extract_pdf_text(url)
+            # paragraphs, pdf_title = extract_pdf_text(url)
+            data = extract_pdf_text(url)
+            paragraphs = data["paragraphs"]
+            pdf_title = data["title"]
             links = []
             main_image = None
             is_pdf = True
