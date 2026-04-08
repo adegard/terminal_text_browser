@@ -16,16 +16,26 @@ import termios
 import tty
 import PyPDF2
 import time
+import hashlib
+
 
 
 # ========= BASIC CONFIG =========
-APP_VERSION = "1.52"
+APP_VERSION = "1.53"
 
 SAFE_MODE = True
 STRIP_DDG_TRACKING = True
 
 DUCK_LITE = "https://lite.duckduckgo.com/lite/"
 BOOKMARK_FILE = os.path.expanduser("~/.tbrowser_bookmarks")
+
+PDF_CACHE_DIR = os.path.expanduser("~/.tbrowser_cache/pdf")
+os.makedirs(PDF_CACHE_DIR, exist_ok=True)
+
+PDF_TEXT_CACHE_DIR = os.path.expanduser("~/.tbrowser_cache/pdf_text")
+os.makedirs(PDF_TEXT_CACHE_DIR, exist_ok=True)
+
+
 
 SEARCH_ENGINES = {
     "duck_lite": "DuckDuckGo Lite",
@@ -543,19 +553,51 @@ def estimate_reading_time(paragraphs, current_block, wpm=70):
     return f"{minutes:.1f} min"
 
 
-def extract_pdf_text(url):
-    try:
-        r = session.get(url, timeout=20)
-        r.raise_for_status()
-    except Exception as e:
-        return [f"[PDF fetch error: {e}]"]
 
+def pdf_cache_path(url):
+    h = hashlib.sha256(url.encode()).hexdigest()
+    return os.path.join(PDF_CACHE_DIR, f"{h}.pdf")
+    
+def pdf_text_cache_path(url):
+    h = hashlib.sha256(url.encode()).hexdigest()
+    return os.path.join(PDF_TEXT_CACHE_DIR, f"{h}.json")
+    
+
+def extract_pdf_text(url):
+    # TEXT CACHE
+    text_cache = pdf_text_cache_path(url)
+    if os.path.exists(text_cache):
+        try:
+            with open(text_cache, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data["paragraphs"], data["title"]
+        except Exception:
+            pass  # fallback to full extraction
+
+    # PDF CACHE
+    cache_path = pdf_cache_path(url)
+    if os.path.exists(cache_path):
+        with open(cache_path, "rb") as f:
+            pdf_bytes = f.read()
+    else:
+        try:
+            r = session.get(url, timeout=20, stream=True)
+            r.raise_for_status()
+        except Exception as e:
+            return [f"[PDF fetch error: {e}]"]
+
+        with open(cache_path, "wb") as f:
+            for chunk in r.iter_content(8192):
+                f.write(chunk)
+
+        pdf_bytes = r.content
+
+    # PARSE PDF
     try:
-        reader = PyPDF2.PdfReader(BytesIO(r.content))
+        reader = PyPDF2.PdfReader(BytesIO(pdf_bytes))
     except Exception as e:
         return [f"[PDF parse error: {e}]"]
-        
-    # Extract title 
+
     pdf_title = extract_pdf_title(reader)
 
     paragraphs = []
@@ -566,7 +608,14 @@ def extract_pdf_text(url):
             paragraphs.append(text)
 
     if not paragraphs:
-        return ["[PDF contains no extractable text]"]
+        return ["[PDF contains no extractable text]"], pdf_title
+
+    # SAVE TEXT CACHE
+    try:
+        with open(text_cache, "w", encoding="utf-8") as f:
+            json.dump({"paragraphs": paragraphs, "title": pdf_title}, f)
+    except:
+        pass
 
     return paragraphs, pdf_title
 
