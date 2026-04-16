@@ -19,6 +19,7 @@ import time
 import hashlib
 
 
+
 # ========= BASIC CONFIG =========
 APP_VERSION = "1.53"
 
@@ -27,14 +28,6 @@ STRIP_DDG_TRACKING = True
 
 DUCK_LITE = "https://lite.duckduckgo.com/lite/"
 BOOKMARK_FILE = os.path.expanduser("~/.tbrowser_bookmarks")
-
-PDF_CACHE_DIR = os.path.expanduser("~/.tbrowser_cache/pdf")
-os.makedirs(PDF_CACHE_DIR, exist_ok=True)
-
-PDF_TEXT_CACHE_DIR = os.path.expanduser("~/.tbrowser_cache/pdf_text")
-os.makedirs(PDF_TEXT_CACHE_DIR, exist_ok=True)
-
-
 
 SEARCH_ENGINES = {
     "duck_lite": "DuckDuckGo Lite",
@@ -552,59 +545,52 @@ def estimate_reading_time(paragraphs, current_block, wpm=70):
     return f"{minutes:.1f} min"
 
 
-
-def pdf_cache_path(url):
-    h = hashlib.sha256(url.encode()).hexdigest()
-    return os.path.join(PDF_CACHE_DIR, f"{h}.pdf")
-    
-def pdf_text_cache_path(url):
-    h = hashlib.sha256(url.encode()).hexdigest()
-    return os.path.join(PDF_TEXT_CACHE_DIR, f"{h}.json")
-    
-
 def extract_pdf_text(url):
-    # TEXT CACHE
-    text_cache = pdf_text_cache_path(url)
-    if os.path.exists(text_cache):
+    # --- CACHE PATHS ---
+    h = hashlib.sha256(url.encode()).hexdigest()
+    cache_pdf = os.path.join(os.path.expanduser("~/.tbrowser_cache/pdf"), f"{h}.pdf")
+    cache_txt = os.path.join(os.path.expanduser("~/.tbrowser_cache/pdf_text"), f"{h}.json")
+
+    # --- TEXT CACHE ---
+    if os.path.exists(cache_txt):
         try:
-            with open(text_cache, "r", encoding="utf-8") as f:
+            with open(cache_txt, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            return {
-                "paragraphs": data["paragraphs"],
-                "title": data["title"]
-            }
-        except Exception:
-            pass  # fallback to full extraction
+            return data["paragraphs"], data["title"]
+        except:
+            pass
 
-    # PDF CACHE
-    cache_path = pdf_cache_path(url)
-    if os.path.exists(cache_path):
-        with open(cache_path, "rb") as f:
-            pdf_bytes = f.read()
-    else:
+    # --- PDF CACHE ---
+    if os.path.exists(cache_pdf):
         try:
-            r = session.get(url, timeout=20, stream=True)
+            with open(cache_pdf, "rb") as f:
+                pdf_bytes = f.read()
+        except:
+            pdf_bytes = None
+    else:
+        pdf_bytes = None
+
+    # --- DOWNLOAD IF NEEDED ---
+    if pdf_bytes is None:
+        try:
+            r = session.get(url, timeout=20)
             r.raise_for_status()
+            pdf_bytes = r.content
         except Exception as e:
-            return {
-                "paragraphs": [f"[PDF fetch error: {e}]"],
-                "title": "PDF Error"
-            }
+            return [f"[PDF fetch error: {e}]"]
 
-        with open(cache_path, "wb") as f:
-            for chunk in r.iter_content(8192):
-                f.write(chunk)
+        # Save PDF cache
+        try:
+            with open(cache_pdf, "wb") as f:
+                f.write(pdf_bytes)
+        except:
+            pass
 
-        pdf_bytes = r.content
-
-    # PARSE PDF
+    # --- PARSE PDF ---
     try:
         reader = PyPDF2.PdfReader(BytesIO(pdf_bytes))
     except Exception as e:
-        return {
-            "paragraphs": [f"[PDF parse error: {e}]"],
-            "title": "PDF Error"
-        }
+        return [f"[PDF parse error: {e}]"]
 
     pdf_title = extract_pdf_title(reader)
 
@@ -616,23 +602,16 @@ def extract_pdf_text(url):
             paragraphs.append(text)
 
     if not paragraphs:
-        return {
-            "paragraphs": ["[PDF contains no extractable text]"],
-            "title": pdf_title
-        }
+        return ["[PDF contains no extractable text]"]
 
-    # SAVE TEXT CACHE
+    # --- SAVE TEXT CACHE ---
     try:
-        with open(text_cache, "w", encoding="utf-8") as f:
+        with open(cache_txt, "w", encoding="utf-8") as f:
             json.dump({"paragraphs": paragraphs, "title": pdf_title}, f)
     except:
         pass
 
-    return {
-        "paragraphs": paragraphs,
-        "title": pdf_title
-    }
-
+    return paragraphs, pdf_title
 
 def extract_pdf_title(reader):
     """
@@ -1479,10 +1458,7 @@ def show_page(url, origin, start_block=0):
     try:
         if url.lower().endswith(".pdf"):
             # PDF mode
-            # paragraphs, pdf_title = extract_pdf_text(url)
-            data = extract_pdf_text(url)
-            paragraphs = data["paragraphs"]
-            pdf_title = data["title"]
+            paragraphs, pdf_title = extract_pdf_text(url)
             links = []
             main_image = None
             is_pdf = True
