@@ -2,3 +2,4 @@ beautifulsoup4
 requests
 Pillow
 PyPDF2
+termios
