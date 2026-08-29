@@ -122,3 +122,7 @@ The script automatically check for new version at startup
 ---
 
 ![Screenshot](screen.jpg?raw=true "Screenshot")
+
+---
+
+For an overview of all my other projects, see https://adegard.github.io/blog/
